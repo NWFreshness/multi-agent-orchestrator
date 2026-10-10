@@ -1,0 +1,123 @@
+{
+  "description": "Recurring topic-brief team: research a topic, stress-test the findings, write the brief.",
+  "members": [
+    {
+      "context": "Topic-brief assignment background plus source-access notes: use web sources first, fall back to workspace files under the provided directory, and record every source URL or file path alongside the claim it supports.",
+      "goal": "Gather cited facts on the assigned topic and produce a source-backed findings bundle; succeed when every key claim carries at least one verifiable source.",
+      "id": "pool-researcher",
+      "model": "opencode-go/deepseek-v4.1-flash",
+      "output_schema": {
+        "properties": {
+          "findings": {
+            "items": {
+              "properties": {
+                "claim": {
+                  "type": "string"
+                },
+                "sources": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "claim",
+                "sources"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "topic": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic",
+          "findings"
+        ],
+        "type": "object"
+      },
+      "role": "researcher",
+      "tools": [
+        "file",
+        "web_search",
+        "web_extract"
+      ]
+    },
+    {
+      "context": "Topic-brief quality bar: the brief must be accurate, scoped to the assignment, and free of unsupported claims; attack the researcher findings bundle against that bar and cite the weak points by claim.",
+      "goal": "Stress-test the researcher findings bundle and return a verdict with supporting objections; succeed when every material weakness is named with its evidence.",
+      "id": "pool-critic",
+      "model": "opencode-go/deepseek-v4.1-flash",
+      "output_schema": {
+        "properties": {
+          "objections": {
+            "items": {
+              "properties": {
+                "claim": {
+                  "type": "string"
+                },
+                "objection": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "claim",
+                "objection"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "verdict": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "verdict",
+          "objections"
+        ],
+        "type": "object"
+      },
+      "role": "critic",
+      "tools": [
+        "file"
+      ]
+    },
+    {
+      "context": "Topic-brief deliverable: a Markdown brief for the requester built from the vetted researcher findings and the critic verdict; keep it scoped to the assignment and note any dissent the critic raised.",
+      "goal": "Write the final topic brief from the vetted findings; succeed when the brief covers every vetted finding in clean Markdown with sources attached.",
+      "id": "pool-writer",
+      "model": "opencode-go/deepseek-v4.1-flash",
+      "output_schema": {
+        "properties": {
+          "brief_markdown": {
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "topic": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic",
+          "brief_markdown",
+          "sources"
+        ],
+        "type": "object"
+      },
+      "role": "writer",
+      "tools": [
+        "file"
+      ]
+    }
+  ],
+  "name": "research-trio"
+}
