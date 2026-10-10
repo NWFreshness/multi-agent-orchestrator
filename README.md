@@ -24,6 +24,12 @@ Phase 1 — foundation: **In progress**. Per-feature status lives in `docs/specs
 | F1.6    | Synthesis contract & output schema   | Done        |
 | F1.7    | Error recovery (retry-once + gaps)   | Done        |
 | F1.8    | Orchestration log writer (PRD R9)    | Done        |
+| F1.9    | /orchestrate slash command registration | Done        |
+
+> **Note (F1.9):** the `/orchestrate` slash command is registered in the local
+> Hermes checkout (`~/.hermes/hermes-agent`, branch
+> `feat/orchestrate-slash-command`). It only takes effect on a fresh Hermes
+> session — restart `hermes` (or open a new CLI window) after pulling.
 
 ## Layout
 
