@@ -15,13 +15,12 @@
 
 ## Completion log (append-only — newest at bottom)
 
-- 2026-10-10 — 1.10 done: test driver merged as e9b6ff3 via PR #10 (squash). Spec
-  PASS; quality flagged no-timeout (real gap) and exit-2-on-missing-script (a
-  spec wording inconsistency, not a defect). Controller applied the timeout
-  fix in cb88634 (60s, TimeoutExpired → red, surfaced to stderr) and shipped.
-  Per-script --self-tests 15/7/7; run_tests.py → 29/29 green. **Phase 1 MVP
-  shipped.** Final tree: 10 PRs, 10 features, 1 open carry-forward (F1.6
-  synthesis output schema content — quality minor 3, deferred to Phase 2).
+- 2026-10-10 — Phase 2 entry: F2.1 + F2.2 specs merged as f94a4c6 via PR #11 (squash).
+  Spec PASS 13/13. Both specs are docs-only — F2.5 owns the actual `resolve_model`
+  Python implementation, F2.3 owns `--dry-run`, F2.4 owns JSON Schema
+  enforcement, F2.6 owns token estimates. F2.1 4-tier chain locked; F2.2
+  independence rule locked (3 cases worked, anti-coupling language). Phase 2
+  is now 2/6 features in flight (specs only, no code yet).
 
 ## Completion log (append-only — newest at bottom)
 
