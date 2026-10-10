@@ -3,7 +3,8 @@
 Source of truth for the dispatcher's content-hash cache. References: PRD
 R12 (24h reuse); implementation `scripts/specialist_cache.py`; flags on
 `scripts/dispatch.py`; the trace carries the stamp (log rendering of
-`cached` is deferred).
+`cached` is deferred). No manual `clear` CLI in F3.3 — expiry is
+TTL-only.
 
 Re-running a plan reuses prior specialist outputs when the cache key
 matches — identical `role + goal + context + model + output_schema`
