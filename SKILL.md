@@ -38,7 +38,7 @@ Batch dispatch: the Orchestrator issues `delegate_task` calls, one array of spec
 
 Recover: failed or timed-out specialists are retried once with an adjusted prompt per the error-handling rule (PRD R8); persistent failures are recorded and the synthesis proceeds with available outputs rather than hanging.
 
-Synthesize: the Orchestrator merges specialist outputs into a single answer, noting dissent and confidence where specialists disagree.
+Synthesize: the Orchestrator merges specialist outputs into a single answer, noting dissent and confidence where specialists disagree. The synthesis contract and output schema are defined in references/synthesis.md.
 
 Log: every run writes the orchestration log (see §6) so the user can read roles, prompts, status, timing, and cost. Full spawn contract and plan JSON schema: see `references/orchestrator.md`.
 
