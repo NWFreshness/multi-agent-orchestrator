@@ -1,8 +1,9 @@
-"""Plan preview printer for the multi-agent-orchestrator skill (F2.3).
+"""Plan preview printer for the multi-agent-orchestrator skill (F2.3 + F2.5).
 
 Stdlib-only CLI: takes a plan JSON path, runs ``validate_plan.validate``,
 computes warnings, resolves the orchestrator + subagent models via the
-D26 stub ``resolve_model(target)``, and prints the locked preview shape.
+full 4-tier ``resolve_model(target)`` chain, and prints the locked preview
+shape.
 
 Usage:
     python3 scripts/plan_preview.py PLAN.json
@@ -10,13 +11,14 @@ Usage:
 
 Exit codes: 0 = preview printed, 1 = invalid plan, 2 = usage/IO.
 
-The thin stub ``resolve_model`` here is the F2.5-replaceable body. The
-PUBLIC CONTRACT is locked: ``resolve_model(target: str) -> Tuple[str, str]``
-returning ``(model, source)``. ``source`` is one of ``env`` / ``default``
-today (F2.5 will add ``option`` and ``config`` per F2.1's chain).
+The ``resolve_model`` helper lives here per D31. The PUBLIC CONTRACT is
+locked: ``resolve_model(target: str) -> Tuple[str, str]`` returning
+``(model, source)``. ``source`` is one of ``option``, ``env``, ``config``,
+``default`` (F2.5 contract). Setting one tier does NOT change the other
+(F2.2 independence).
 
 D26/D27/D28 LOCKED:
-- D26: thin stub — env var + Phase 1 default only.
+- D26 (F2.5 fullfilled): 4-tier chain — option > env > config > default.
 - D27: dry-run does NOT validate the model string. Prints the raw value.
 - D28: warnings are (a) unknown role, (b) per-specialist model mismatch,
        (c) cycle in dependencies (defensive; validator already blocks).
@@ -96,29 +98,104 @@ def _scripts_dir() -> str:
         __import__("os").path.abspath(__file__))
 
 
-def resolve_model(target: str) -> Tuple[str, str]:
-    """F2.3 D26 thin stub. Returns ``(model, source)``.
+def _config_value(key: str) -> str:
+    """Read a single value from ``~/.hermes/config.yaml`` (D32).
 
-    The public contract is locked: ``resolve_model(target)`` returns a
-    tuple ``(model, source)``. F2.5 will replace the body with the full
-    4-tier chain (options → env → config → default) per F2.1's spec, but
-    the caller signature does not change. Today only env + default.
-
-    ``target`` is one of ``"orchestrator"`` or ``"subagent"`` (F2.2
-    independence: one call per target; cross-talk is a defect).
+    The reader is stdlib-only: flat ``key: value`` lines, ``# comments``,
+    blank lines ignored. ONLY keys of the form
+    ``multi_agent_orchestrator.<key>`` are recognized, so a future config
+    file with other sections is silently ignored here. Missing file,
+    malformed file, or missing key → ``""`` (tier skipped). The path
+    lookup uses ``__import__`` to keep the module's top-level imports
+    stdlib-only (D24 / F2.1 D24).
     """
+    os = __import__("os")
+    home = os.path.expanduser("~")
+    config_path = os.path.join(home, ".hermes", "config.yaml")
+    if not os.path.isfile(config_path):
+        return ""
+    prefix = "multi_agent_orchestrator.%s" % key
+    try:
+        with open(config_path, "r", encoding="utf-8") as handle:
+            for raw in handle:
+                line = raw.strip()
+                if not line or line.startswith("#"):
+                    continue
+                # Expect ``<dotted_key>: <value>`` — strip inline ``#``
+                # comments before splitting.
+                hash_at = line.find(" #")
+                if hash_at >= 0:
+                    line = line[:hash_at].rstrip()
+                if ":" not in line:
+                    continue
+                k, _, v = line.partition(":")
+                k = k.strip()
+                v = v.strip()
+                if k == prefix and v:
+                    return v
+    except OSError:
+        return ""
+    return ""
+
+
+def resolve_model(
+    target: str,
+    orchestrator: Optional[str] = None,
+    subagent: Optional[str] = None,
+) -> Tuple[str, str]:
+    """F2.5 4-tier chain: option > env > config > default. Returns ``(model, source)``.
+
+    ``source`` is one of the four literals:
+        ``"option"``  — kwarg was set (non-empty)
+        ``"env"``     — ``HERMES_ORCHESTRATOR_MODEL`` / ``HERMES_SUBAGENT_MODEL``
+        ``"config"``  — ``~/.hermes/config.yaml`` under
+                        ``multi_agent_orchestrator.{orchestrator_model,
+                        subagent_model}``
+        ``"default"`` — Phase 1 floor (always non-empty)
+
+    First non-empty wins. Independence (F2.2 / D21): this function NEVER
+    reads the other target's tiers. Each call walks the chain for one
+    target only.
+
+    ``orchestrator`` and ``subagent`` are the option-tier kwargs wired by
+    ``scripts/dispatch.py`` (CLI flags ``--orchestrator-model`` /
+    ``--subagent-model``). They are also the seam a future library
+    caller can use to inject the option tier directly.
+
+    Empty / whitespace-only values at every tier are treated as "unset"
+    and the chain continues. The Phase 1 default floor is the locked
+    fallback — this function NEVER raises and ALWAYS returns a non-empty
+    model string (per F2.1 §6).
+    """
+    # Tier 1 (option): the explicit per-call override.
+    option_value: Optional[str]
     if target == "orchestrator":
-        env_value = _env_get("HERMES_ORCHESTRATOR_MODEL")
-        if env_value and env_value.strip():
-            return (env_value, "env")
+        option_value = orchestrator
+    elif target == "subagent":
+        option_value = subagent
+    else:
+        # Defensive: unknown target. Return the orchestrator default so
+        # the preview never crashes on bad input (matches F2.3 behavior).
         return (DEFAULT_ORCHESTRATOR_MODEL, "default")
+    if option_value and option_value.strip():
+        return (option_value, "option")
+
+    # Tier 2 (env): shell environment.
+    env_key = ("HERMES_ORCHESTRATOR_MODEL" if target == "orchestrator"
+               else "HERMES_SUBAGENT_MODEL")
+    env_value = _env_get(env_key)
+    if env_value and env_value.strip():
+        return (env_value, "env")
+
+    # Tier 3 (config): per-profile YAML, stdlib-only flat reader (D32).
+    config_key = "orchestrator_model" if target == "orchestrator" else "subagent_model"
+    config_value = _config_value(config_key)
+    if config_value and config_value.strip():
+        return (config_value, "config")
+
+    # Tier 4 (default): Phase 1 floor.
     if target == "subagent":
-        env_value = _env_get("HERMES_SUBAGENT_MODEL")
-        if env_value and env_value.strip():
-            return (env_value, "env")
         return (DEFAULT_SUBAGENT_MODEL, "default")
-    # Defensive: unknown target. F2.5 will raise; F2.3 returns the
-    # orchestrator default so the preview never crashes on bad input.
     return (DEFAULT_ORCHESTRATOR_MODEL, "default")
 
 
@@ -242,14 +319,24 @@ def print_preview(
     plan_path: str,
     resolved: Dict[str, Tuple[str, str]],
     warnings: List[str],
+    *,
+    cost_per_call: float = 0.01,
+    max_cost: float = 0.0,
 ) -> None:
-    """Print the locked F2.3 markdown preview shape.
+    """Print the locked F2.3 + F2.5 markdown preview shape.
 
     5 sections, in order: header → specialists table → batch layout →
     next step. The header itself contains the validated/n/warnings lines
-    plus the resolved models. Warnings get an indented bullet block
-    under the header (omitted when count == 0). No trailing blank line
-    is required — the section ordering is what the spec grep tests.
+    plus the resolved models. F2.5 adds ONE extra header line when
+    ``cost_per_call`` is non-negative AND the plan has specialists:
+    ``- Estimated cost: $X.XX (max $Y.YY)``. ``max_cost`` of 0 prints
+    ``max $0.00`` (the D34 "no budget" default — the cost check is OFF).
+    The line is omitted when there are no specialists (avoids printing
+    ``$0.00`` for an empty plan).
+
+    Warnings get an indented bullet block under the header (omitted
+    when count == 0). No trailing blank line is required — the section
+    ordering is what the spec grep tests.
 
     ``resolved`` is ``{"orchestrator": (model, source),
     "subagent": (model, source)}`` — one tuple per target.
@@ -271,6 +358,11 @@ def print_preview(
     print("- Subagent model: %s (source: %s)" % (sub_model, sub_source))
     print("- Specialists: %d (target ~10, range 3-15)" % n_spec)
     print("- Batches: %d" % n_batch)
+    # F2.5 cost estimate line — only when there ARE specialists, so an
+    # empty plan doesn't print a meaningless ``$0.00``.
+    if n_spec > 0 and cost_per_call >= 0:
+        estimate = n_spec * cost_per_call
+        print("- Estimated cost: $%.2f (max $%.2f)" % (estimate, max_cost))
     if warnings:
         print("- Warnings: %d" % len(warnings))
         for w in warnings:
@@ -429,16 +521,19 @@ def run_self_test() -> bool:
     saved = sys.stdout
     sys.stdout = cap
     try:
-        print_preview(plan, "->", resolved, warnings)
+        print_preview(plan, "->", resolved, warnings,
+                      cost_per_call=0.01, max_cost=0.0)
     finally:
         sys.stdout = saved
     text = "".join(buf_lines + [s for s in cap])
 
-    # Locked marker list, in spec order. Each is the literal substring the
+    # Locked marker list, in spec order. Each is a literal substring the
     # spec's controller scan checks for in the dry-run output. Per the
-    # F2.3 spec: header → validated/n lines → resolved-model lines →
-    # specialists count → batches → warnings → table → batch layout →
-    # next step.
+    # F2.3 spec + F2.5's one-line addition: header → validated/n lines →
+    # resolved-model lines → specialists count → batches → cost estimate
+    # → warnings → table → batch layout → next step. The cost line is
+    # only printed when there ARE specialists; the marker check below
+    # runs against a fixture with 3 specialists so the line is present.
     markers = [
         "# Plan preview",
         "- Plan:",
@@ -447,6 +542,7 @@ def run_self_test() -> bool:
         "- Subagent model:",
         "- Specialists:",
         "- Batches:",
+        "- Estimated cost:",
         "- Warnings:",
         "## Specialists (preview)",
         "## Batch layout",
@@ -467,9 +563,9 @@ def run_self_test() -> bool:
         last = idx
         positions.append(idx)
 
-    # All 11 markers present in order?
+    # All 12 markers present in order?
     if len(positions) == len(markers):
-        print("SELF_TEST PASS: 11 locked markers present in spec order")
+        print("SELF_TEST PASS: 12 locked markers present in spec order")
 
     # The resolved tuple shape must always be (str, str).
     if not (isinstance(orch, tuple) and len(orch) == 2
@@ -517,7 +613,135 @@ def run_self_test() -> bool:
     else:
         print("SELF_TEST PASS: goal truncated to <=60 chars with '...'")
 
-    total = 7
+    # ---- F2.5 4-tier chain fixtures (additive) ----
+    # Each fixture walks resolve_model() under exactly one tier so the
+    # chain is verifiable. The "default" tier is also asserted (already
+    # proven by the env-block's `finally` cleanup), but a fresh explicit
+    # call makes the fixture self-contained.
+
+    # Tier 4 (default): no env, no config, no option → floor + "default"
+    default_orch = resolve_model("orchestrator")
+    default_sub = resolve_model("subagent")
+    if default_orch != (DEFAULT_ORCHESTRATOR_MODEL, "default"):
+        failures += 1
+        print("SELF_TEST FAIL: default tier orchestrator "
+              "(got %r)" % (default_orch,))
+    elif default_sub != (DEFAULT_SUBAGENT_MODEL, "default"):
+        failures += 1
+        print("SELF_TEST FAIL: default tier subagent "
+              "(got %r)" % (default_sub,))
+    else:
+        print("SELF_TEST PASS: tier 4 default returns floor + 'default'")
+
+    # Tier 1 (option): the kwarg wins over env and default.
+    _env_set("HERMES_ORCHESTRATOR_MODEL", "opencode-go/env1")
+    try:
+        opt_orch = resolve_model("orchestrator",
+                                 orchestrator="opencode-go/opt")
+        if opt_orch != ("opencode-go/opt", "option"):
+            failures += 1
+            print("SELF_TEST FAIL: option tier beats env "
+                  "(got %r)" % (opt_orch,))
+        else:
+            print("SELF_TEST PASS: tier 1 option beats env (source: option)")
+        # Independence: setting the orchestrator option MUST NOT change
+        # the subagent resolved tuple (F2.2).
+        opt_sub = resolve_model("subagent")
+        if opt_sub != (DEFAULT_SUBAGENT_MODEL, "default"):
+            failures += 1
+            print("SELF_TEST FAIL: option tier independence (subagent leaked)")
+        else:
+            print("SELF_TEST PASS: tier 1 option independence holds")
+    finally:
+        _env_del("HERMES_ORCHESTRATOR_MODEL")
+
+    # Tier 3 (config): write a temp config file with a single key under
+    # the locked prefix; resolve_model() MUST pick it up. We use the
+    # real path ``~/.hermes/config.yaml`` to exercise the same code
+    # path the production reader uses, and restore the original file in
+    # ``finally``.
+    os = __import__("os")
+    config_dir = os.path.expanduser("~/.hermes")
+    config_path = os.path.join(config_dir, "config.yaml")
+    saved_config: Optional[str] = None
+    config_existed = os.path.isfile(config_path)
+    if config_existed:
+        with open(config_path, "r", encoding="utf-8") as _h:
+            saved_config = _h.read()
+    try:
+        if not os.path.isdir(config_dir):
+            os.makedirs(config_dir, exist_ok=True)
+        with open(config_path, "w", encoding="utf-8") as _h:
+            _h.write("# F2.5 self-test fixture\n"
+                     "multi_agent_orchestrator.subagent_model: "
+                     "opencode-go/cfg\n")
+        cfg_sub = resolve_model("subagent")
+        if cfg_sub != ("opencode-go/cfg", "config"):
+            failures += 1
+            print("SELF_TEST FAIL: config tier subagent "
+                  "(got %r)" % (cfg_sub,))
+        else:
+            print("SELF_TEST PASS: tier 3 config returns config value "
+                  "+ 'config'")
+        # Independence: the config-tier subagent MUST NOT change the
+        # orchestrator (which still has no env, no config, no option).
+        cfg_orch = resolve_model("orchestrator")
+        if cfg_orch != (DEFAULT_ORCHESTRATOR_MODEL, "default"):
+            failures += 1
+            print("SELF_TEST FAIL: config tier independence (orchestrator "
+                  "leaked, got %r)" % (cfg_orch,))
+        else:
+            print("SELF_TEST PASS: tier 3 config independence holds")
+    finally:
+        # Restore the prior config (or remove if we created it).
+        if saved_config is not None:
+            with open(config_path, "w", encoding="utf-8") as _h:
+                _h.write(saved_config)
+        elif os.path.isfile(config_path):
+            os.unlink(config_path)
+
+    # Tier 2 (env): already covered by the existing env-override block
+    # above, but re-assert here for completeness with independence.
+    _env_set("HERMES_SUBAGENT_MODEL", "opencode-go/env2")
+    try:
+        env_sub = resolve_model("subagent")
+        if env_sub != ("opencode-go/env2", "env"):
+            failures += 1
+            print("SELF_TEST FAIL: env tier subagent (got %r)" % (env_sub,))
+        else:
+            print("SELF_TEST PASS: tier 2 env returns env value + 'env'")
+        env_orch = resolve_model("orchestrator")
+        if env_orch != (DEFAULT_ORCHESTRATOR_MODEL, "default"):
+            failures += 1
+            print("SELF_TEST FAIL: env tier independence (orchestrator "
+                  "leaked, got %r)" % (env_orch,))
+        else:
+            print("SELF_TEST PASS: tier 2 env independence holds")
+    finally:
+        _env_del("HERMES_SUBAGENT_MODEL")
+
+    # F2.5 cost-estimate preview line: 3 specialists × 0.01 = $0.03,
+    # max $0.00 (D34 default). Locked substring from the spec.
+    preview_with_cost = []
+    cap_c = _Cap()
+    saved_c = sys.stdout
+    sys.stdout = cap_c
+    try:
+        print_preview(plan, "->", resolved, warnings,
+                      cost_per_call=0.01, max_cost=0.0)
+    finally:
+        sys.stdout = saved_c
+    preview_text = "".join(preview_with_cost + [s for s in cap_c])
+    expected_cost_line = "- Estimated cost: $0.03 (max $0.00)"
+    if expected_cost_line not in preview_text:
+        failures += 1
+        print("SELF_TEST FAIL: estimated cost line missing "
+              "(expected %r in output)" % expected_cost_line)
+    else:
+        print("SELF_TEST PASS: estimated cost line printed "
+              "(3 specs × $0.01 = $0.03, max $0.00)")
+
+    total = 13
     print("SELF_TEST: %d/%d passed" % (total - failures, total))
     return failures == 0
 
@@ -533,6 +757,24 @@ def main(argv: Optional[List[str]] = None) -> int:
                         help="Path to a plan JSON file")
     parser.add_argument("--self-test", action="store_true",
                         help="Run the built-in fixture + assertions")
+    parser.add_argument("--max-cost", type=float, default=0.0,
+                        help="F2.5: maximum estimated cost in USD. 0 (default) "
+                             "disables the budget abort. The estimate is "
+                             "specialists × --cost-per-call; if it exceeds "
+                             "--max-cost the dispatcher aborts with "
+                             "PLAN_OVER_BUDGET and exits 2.")
+    parser.add_argument("--cost-per-call", type=float, default=0.01,
+                        help="F2.5: estimated USD cost per specialist call "
+                             "(default 0.01). Multiplied by specialists to "
+                             "produce the --max-cost estimate.")
+    parser.add_argument("--orchestrator-model", default=None,
+                        help="F2.5: option-tier orchestrator model override. "
+                             "Bypasses env / config / default for the "
+                             "orchestrator only (subagent unaffected, F2.2).")
+    parser.add_argument("--subagent-model", default=None,
+                        help="F2.5: option-tier subagent model override. "
+                             "Bypasses env / config / default for the "
+                             "subagent only (orchestrator unaffected, F2.2).")
     args = parser.parse_args(argv)
 
     if args.self_test:
@@ -541,6 +783,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     if not args.plan:
         parser.print_usage(sys.stderr)
         print("error: PLAN.json is required (or pass --self-test)",
+              file=sys.stderr)
+        return 2
+
+    if args.cost_per_call < 0:
+        print("error: --cost-per-call must be >= 0 (got %r)"
+              % args.cost_per_call, file=sys.stderr)
+        return 2
+    if args.max_cost < 0:
+        print("error: --max-cost must be >= 0 (got %r)" % args.max_cost,
               file=sys.stderr)
         return 2
 
@@ -559,10 +810,25 @@ def main(argv: Optional[List[str]] = None) -> int:
             print("ERROR: %s" % e)
         return 1
 
-    resolved = {"orchestrator": resolve_model("orchestrator"),
-                "subagent": resolve_model("subagent")}
+    # F2.5 cost-budget check — runs AFTER validation, BEFORE preview.
+    # On the preview path we surface the abort (exit 2) without ever
+    # dispatching; no logs/ is created (no specialist runs in preview).
+    specialists = plan.get("specialists") if isinstance(plan, dict) else None
+    n_spec = len(specialists) if isinstance(specialists, list) else 0
+    estimate = n_spec * args.cost_per_call
+    if args.max_cost > 0 and estimate > args.max_cost:
+        print("PLAN_OVER_BUDGET: estimated $%.2f > max $%.2f"
+              % (estimate, args.max_cost), file=sys.stderr)
+        return 2
+
+    resolved = {"orchestrator": resolve_model("orchestrator",
+                                              orchestrator=args.orchestrator_model),
+                "subagent": resolve_model("subagent",
+                                          subagent=args.subagent_model)}
     warnings = _compute_warnings(plan, val_warnings, resolved["subagent"][0])
-    print_preview(plan, args.plan, resolved, warnings)
+    print_preview(plan, args.plan, resolved, warnings,
+                  cost_per_call=args.cost_per_call,
+                  max_cost=args.max_cost)
     return 0
 
 
