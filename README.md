@@ -6,25 +6,26 @@ See [`docs/prd/multi-agent-orchestrator.md`](./docs/prd/multi-agent-orchestrator
 
 ## Status
 
-Phase 1 — foundation: **In progress**. Per-feature status lives in `docs/specs/INDEX.md`; PRD is complete.
+Phase 1 MVP shipped: 10/10 features done. See `docs/specs/INDEX.md` for status and PRs.
 
-| Phase | Scope                                            | Status      |
-| ----- | ------------------------------------------------ | ----------- |
-| 1     | MVP, fixed models (Kimi K3 / DeepSeek V4.1 Flash) | In progress |
+| Phase | Scope                                            | Status |
+| ----- | ------------------------------------------------ | ------ |
+| 1     | MVP, fixed models (Kimi K3 / DeepSeek V4.1 Flash) | Done   |
 | 2     | Model selection & overrides                      | Not started |
 | 3     | Advanced (specialist pools, custom archetypes)   | Not started |
 
-| Feature | Scope                                 | Status      |
-| ------- | ------------------------------------- | ----------- |
-| F1.1    | Skill scaffold (SKILL.md + layout)    | Done        |
-| F1.2    | Orchestrator spawn contract + plan    | Done        |
-| F1.3    | Static archetype catalog (Appendix A) | Done        |
-| F1.4    | Plan parsing + validation             | Done        |
-| F1.5    | Batch dispatch (no real LLM)         | Done        |
-| F1.6    | Synthesis contract & output schema   | Done        |
-| F1.7    | Error recovery (retry-once + gaps)   | Done        |
-| F1.8    | Orchestration log writer (PRD R9)    | Done        |
-| F1.9    | /orchestrate slash command registration | Done        |
+| Feature | Scope                                    | Status |
+| ------- | ---------------------------------------- | ------ |
+| F1.1    | Skill scaffold (SKILL.md + layout)       | Done   |
+| F1.2    | Orchestrator spawn contract + plan       | Done   |
+| F1.3    | Static archetype catalog (Appendix A)    | Done   |
+| F1.4    | Plan parsing + validation                | Done   |
+| F1.5    | Batch dispatch (no real LLM)             | Done   |
+| F1.6    | Synthesis contract & output schema       | Done   |
+| F1.7    | Error recovery (retry-once + gaps)       | Done   |
+| F1.8    | Orchestration log writer (PRD R9)        | Done   |
+| F1.9    | /orchestrate slash command registration | Done   |
+| F1.10   | Test driver (`scripts/run_tests.py`)    | Done   |
 
 > **Note (F1.9):** the `/orchestrate` slash command is registered in the local
 > Hermes checkout (`~/.hermes/hermes-agent`, branch
