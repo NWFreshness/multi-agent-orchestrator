@@ -569,6 +569,11 @@ def dispatch_plan(
     retry_strategy: str = "continue",
     retry_test_overrides: Optional[Dict[str, List[int]]] = None,
     schema_check: bool = True,
+    *,
+    orchestrator: Optional[str] = None,
+    subagent: Optional[str] = None,
+    max_cost: float = 0.0,
+    cost_per_call: float = 0.01,
 ) -> Tuple[int, List[Dict[str, Any]]]:
     """Run all batches honoring retry policy. Returns (exit_code, trace_records).
 
@@ -586,6 +591,14 @@ def dispatch_plan(
     per-specialist ``output_schema`` content check. When False, the
     check is skipped entirely (no ``schema_ok`` field is added, no
     schema mismatches are recorded).
+
+    F2.5 keyword-only kwargs (after ``*``): ``orchestrator`` and
+    ``subagent`` feed the option tier of ``resolve_model()`` (per
+    call); ``max_cost`` and ``cost_per_call`` are accepted for signature
+    parity with the CLI surface but the cost-budget check itself runs
+    in ``main()`` before this function is called (no logs/ created on
+    over-budget). These parameters do not change the behavior of this
+    function today; they're a forward-compatible seam.
     """
     specialists = plan.get("specialists", [])
     batches = plan.get("batches", [])
@@ -1024,7 +1037,126 @@ def run_self_test(scripts_dir: Path) -> bool:
         print("SELF_TEST PASS: post-dispatch schema check "
               "(good=ok, mismatch=failed with output_schema mismatch error)")
 
-    total = 8
+    # ---- F2.5 cost-budget + option-tier resolution (additive) ----
+    # Two fixtures: (a) --max-cost 0.001 with a 3-spec plan → exit 2,
+    # PLAN_OVER_BUDGET line printed, no logs/ created; (b) --max-cost
+    # 100 with the same plan → exit 0, normal dispatch. These exercise
+    # the F2.5 budget check WITHOUT going through the live
+    # ``run_specialist`` path's trace file, so we drive ``main()``
+    # directly with a stubbed argv. We use a tmp plan JSON in /tmp so
+    # it survives the ``_wipe_logs()`` calls (which recursively remove
+    # anything under the repo's ``logs/`` directory).
+
+    cost_over_plan = _self_test_plan()  # 3 specialists, default config
+    cost_over_path = Path("/tmp") / "_f25_cost_over.json"
+    with open(cost_over_path, "w", encoding="utf-8") as _h:
+        json.dump(cost_over_plan, _h)
+    _wipe_logs()
+    over_exit = main([
+        str(cost_over_path),
+        "--max-cost", "0.001",
+    ])
+    over_logs = Path("logs").is_dir()
+    if over_exit != 2:
+        failures += 1
+        print("SELF_TEST FAIL: cost-over-budget exit code "
+              "(expected 2, got %d)" % over_exit)
+    elif over_logs:
+        failures += 1
+        print("SELF_TEST FAIL: cost-over-budget created logs/ "
+              "(should NOT)")
+    else:
+        print("SELF_TEST PASS: --max-cost 0.001 + 3-spec plan → "
+              "exit 2, no logs/ created")
+
+    # Fixture F2.5-B: cost under budget → exit 0.
+    _wipe_logs()
+    under_exit = main([
+        str(cost_over_path),
+        "--max-cost", "100",
+    ])
+    if under_exit != 0:
+        failures += 1
+        print("SELF_TEST FAIL: cost-under-budget exit code "
+              "(expected 0, got %d)" % under_exit)
+    else:
+        print("SELF_TEST PASS: --max-cost 100 + 3-spec plan → "
+              "exit 0 (under budget)")
+
+    # Fixture F2.5-C: --max-cost 0 (D34 default) → no check, exit 0.
+    _wipe_logs()
+    no_budget_exit = main([str(cost_over_path)])
+    if no_budget_exit != 0:
+        failures += 1
+        print("SELF_TEST FAIL: --max-cost 0 (default) exit code "
+              "(expected 0, got %d)" % no_budget_exit)
+    else:
+        print("SELF_TEST PASS: --max-cost 0 (D34 default) → no budget check, "
+              "exit 0")
+
+    # Fixture F2.5-D: --dry-run + --max-cost 0.001 → dry-run still exits 2,
+    # no logs/ created (cost check fires before the preview shape is printed).
+    _wipe_logs()
+    dry_over_exit = main([
+        str(cost_over_path),
+        "--dry-run",
+        "--max-cost", "0.001",
+    ])
+    dry_over_logs = Path("logs").is_dir()
+    if dry_over_exit != 2:
+        failures += 1
+        print("SELF_TEST FAIL: dry-run + cost-over-budget exit code "
+              "(expected 2, got %d)" % dry_over_exit)
+    elif dry_over_logs:
+        failures += 1
+        print("SELF_TEST FAIL: dry-run + cost-over-budget created logs/")
+    else:
+        print("SELF_TEST PASS: --dry-run + --max-cost 0.001 → exit 2, "
+              "no logs/ created")
+
+    # Fixture F2.5-E: --dry-run + --orchestrator-model + --subagent-model
+    # → preview shape shows option-tier values for both targets.
+    _wipe_logs()
+    dry_models_buf: List[str] = []
+    saved_stdout = sys.stdout
+
+    class _DryCap(list):
+        def write(self, s: str) -> int:
+            self.append(s)
+            return len(s)
+
+    cap_d = _DryCap()
+    sys.stdout = cap_d
+    try:
+        dry_models_exit = main([
+            str(cost_over_path),
+            "--dry-run",
+            "--orchestrator-model", "opencode-go/cli-orch",
+            "--subagent-model", "opencode-go/cli-sub",
+        ])
+    finally:
+        sys.stdout = saved_stdout
+    dry_models_text = "".join(dry_models_buf + [s for s in cap_d])
+    has_orch_option = ("opencode-go/cli-orch" in dry_models_text
+                       and "(source: option)" in dry_models_text)
+    if dry_models_exit != 0:
+        failures += 1
+        print("SELF_TEST FAIL: --dry-run + model flags exit code "
+              "(expected 0, got %d)" % dry_models_exit)
+    elif not has_orch_option:
+        failures += 1
+        print("SELF_TEST FAIL: --dry-run + --orchestrator-model did NOT "
+              "print option source in preview")
+    else:
+        print("SELF_TEST PASS: --dry-run + --orchestrator-model + "
+              "--subagent-model → preview shows option source")
+
+    # Cleanup the temp plan so the repo's working tree stays clean.
+    if cost_over_path.is_file():
+        cost_over_path.unlink()
+    _wipe_logs()
+
+    total = 13
     print("SELF_TEST: %d/%d passed" % (total - failures, total))
     return failures == 0
 
@@ -1056,6 +1188,25 @@ def main(argv: Optional[List[str]] = None) -> int:
                         help="Validate + resolve + print the locked F2.3 "
                              "preview shape and exit 0; do NOT dispatch. "
                              "Order-independent with the other flags.")
+    parser.add_argument("--orchestrator-model", default=None,
+                        help="F2.5: option-tier orchestrator model override. "
+                             "Bypasses env / config / default for the "
+                             "orchestrator only (subagent unaffected, F2.2).")
+    parser.add_argument("--subagent-model", default=None,
+                        help="F2.5: option-tier subagent model override. "
+                             "Bypasses env / config / default for the "
+                             "subagent only (orchestrator unaffected, F2.2).")
+    parser.add_argument("--max-cost", type=float, default=0.0,
+                        help="F2.5: maximum estimated cost in USD. 0 (default) "
+                             "disables the budget abort. The estimate is "
+                             "specialists × --cost-per-call; if it exceeds "
+                             "--max-cost the dispatcher aborts with "
+                             "PLAN_OVER_BUDGET and exits 2 (or, with --dry-run, "
+                             "prints the estimate and exits 2).")
+    parser.add_argument("--cost-per-call", type=float, default=0.01,
+                        help="F2.5: estimated USD cost per specialist call "
+                             "(default 0.01). Multiplied by specialists to "
+                             "produce the --max-cost estimate.")
     parser.add_argument("--no-schema-check", action="store_true", default=False,
                         help="F2.4: skip the post-dispatch per-specialist "
                              "output_schema content check. Order-independent "
@@ -1084,6 +1235,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("error: --max-retries must be >= 0 (got %d)" % args.max_retries,
               file=sys.stderr)
         return 2
+    if args.cost_per_call < 0:
+        print("error: --cost-per-call must be >= 0 (got %r)"
+              % args.cost_per_call, file=sys.stderr)
+        return 2
+    if args.max_cost < 0:
+        print("error: --max-cost must be >= 0 (got %r)" % args.max_cost,
+              file=sys.stderr)
+        return 2
 
     fail_mode, simulate_n = args.fail_mode
 
@@ -1103,6 +1262,20 @@ def main(argv: Optional[List[str]] = None) -> int:
             print("ERROR: %s" % error)
         return 1
 
+    # F2.5 cost-budget check — runs AFTER plan validation, BEFORE any
+    # dispatch (or dry-run print). Plan invalid → exit 1 (already
+    # handled above); cost over budget → exit 2. ``--max-cost 0`` (the
+    # D34 default) disables the check entirely. ``--dry-run`` honors the
+    # same check: a budget-breach on the preview path prints the
+    # PLAN_OVER_BUDGET line to stderr and exits 2 — no logs/ is created.
+    specialists = plan.get("specialists") if isinstance(plan, dict) else None
+    n_spec = len(specialists) if isinstance(specialists, list) else 0
+    cost_estimate = n_spec * args.cost_per_call
+    if args.max_cost > 0 and cost_estimate > args.max_cost:
+        print("PLAN_OVER_BUDGET: estimated $%.2f > max $%.2f"
+              % (cost_estimate, args.max_cost), file=sys.stderr)
+        return 2
+
     # F2.3 dry-run: validate + resolve + print, then EXIT before the
     # dispatch loop. No trace is written, no specialist is spawned, no
     # log directory is created. argparse made the flag
@@ -1118,12 +1291,18 @@ def main(argv: Optional[List[str]] = None) -> int:
             print("error: cannot import plan_preview from %s: %s"
                   % (scripts_dir, exc), file=sys.stderr)
             return 2
-        resolved = {"orchestrator": plan_preview.resolve_model("orchestrator"),
-                    "subagent": plan_preview.resolve_model("subagent")}
+        resolved = {"orchestrator": plan_preview.resolve_model(
+                        "orchestrator",
+                        orchestrator=args.orchestrator_model),
+                    "subagent": plan_preview.resolve_model(
+                        "subagent",
+                        subagent=args.subagent_model)}
         preview_warnings = plan_preview._compute_warnings(
             plan, warnings, resolved["subagent"][0])
         plan_preview.print_preview(
-            plan, args.plan, resolved, preview_warnings)
+            plan, args.plan, resolved, preview_warnings,
+            cost_per_call=args.cost_per_call,
+            max_cost=args.max_cost)
         return 0
 
     scripts_dir = Path(__file__).resolve().parent

@@ -28,6 +28,7 @@ Phase 1 MVP shipped: 10/10 features done. See `docs/specs/INDEX.md` for status a
 | F1.10   | Test driver (`scripts/run_tests.py`)    | Done   |
 | F2.3    | `--dry-run` plan preview                 | Done   |
 | F2.4    | `output_schema` content enforcement     | Done   |
+| F2.5    | Cost-budget abort + real `resolve_model` | Done        |
 
 > **Note (F1.9):** the `/orchestrate` slash command is registered in the local
 > Hermes checkout (`~/.hermes/hermes-agent`, branch
