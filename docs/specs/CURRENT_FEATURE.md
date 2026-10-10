@@ -2,16 +2,19 @@
 
 ## In progress
 
-### 2.1 — Model resolution chain (options → env → config → default)
+### 2.4 — `output_schema` content enforcement (F2.4 spec + F2.4 implementation)
 
-- Spec: `docs/specs/phase-2/2.1-model-resolution.md`
-- Status: specs drafting (this PR); no implementer dispatch yet
-- Sibling: 2.2 ships the same PR (`feat/2.1-2.2-phase-2-specs`) — both
-  docs-only, both lock the 4-tier chain (D22) + independence (D21) so F2.3
-  / F2.5 can import `resolve_model()`.
-- Roll-over rule: this branch commits `pending` → `in_progress` for F2.1
-  (and F2.2) on the same commit that lands the spec bodies. Squash-merging
-  flips both to `done` and clears this block for the implementer dispatch.
+- Spec: `docs/specs/phase-2/2.4-output-schema-enforcement.md` (to be drafted)
+- Branch: `feat/2.4-schema-enforcement`
+- Status: implementer dispatch pending
+- Gate: per-specialist `output_schema` validated against a real JSON Schema
+  BEFORE dispatch (currently F1.4 validator only checks "is the value a
+  dict?"). Stdlib-only validator; a specialist that returns output not
+  matching its declared schema is treated as a synthesis-time failure
+  (per F1.6 gap rule a: a failed specialist surfaces in `gaps`). Reuses
+  the F1.4 self-test surface for the schema checker; new
+  `scripts/validate_schema.py` module. Two-stage review + controller
+  green; squash-merged via PR.
 
 ## Completion log (append-only — newest at bottom)
 
