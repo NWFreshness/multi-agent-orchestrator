@@ -17,6 +17,7 @@ Phase 1 — foundation: **In progress**. F1.1 (skill scaffold) is underway; PRD 
 | Feature | Scope                              | Status      |
 | ------- | ---------------------------------- | ----------- |
 | F1.1    | Skill scaffold (SKILL.md + layout) | In progress |
+| F1.2    | Orchestrator spawn contract + plan | In progress |
 
 ## Layout
 
