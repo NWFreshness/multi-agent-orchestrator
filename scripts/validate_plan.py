@@ -46,9 +46,30 @@ DEFAULT_MODEL = "opencode-go/deepseek-v4.1-flash"
 TOP_LEVEL_KEYS = frozenset(["task_summary", "specialists", "batches", "dependencies"])
 SPECIALIST_FIELDS = ("id", "role", "goal", "context", "output_schema", "tools", "model")
 
+# E2: specialist count envelope. Targets: 3 (minimum useful team) to 15
+# (coordination cost rises steeply past that). Update in one place.
+MIN_SPECIALISTS = 3
+MAX_SPECIALISTS = 15
+
+# E8: cap recursion depth on user-supplied JSON so deep output_schema (LLM-generated)
+# can never crash the gate. Orchestrator §6 forbids tracebacks; this enforces it.
+MAX_NESTING_DEPTH = 64
+
 
 def _role_known(role: str) -> bool:
     return role in KNOWN_ROLES or role.startswith(DOMAIN_EXPERT_PREFIX)
+
+
+def _is_reviewer(role: Any) -> bool:
+    """E7: a spec satisfies the reviewer rule when its role is 'critic' or
+    starts with 'reviewer-'. Pure helper so callers stay readable.
+
+    Accepts Any because callers pass dict.get(...) results that may be
+    missing or non-string; the isinstance guard is the single source of truth
+    so we don't duplicate it at every call site.
+    """
+    return isinstance(role, str) and (
+        role == "critic" or role.startswith("reviewer-"))
 
 
 def _find_cycle(dependencies: Dict[str, Any], idset: set) -> List[str]:
@@ -88,22 +109,68 @@ def _find_cycle(dependencies: Dict[str, Any], idset: set) -> List[str]:
     return []
 
 
-def _check_nesting(node: Any, path: str, errors: List[str], seen: set) -> None:
-    """E8: flag any nested 'specialists' key below the top level."""
-    if isinstance(node, dict):
-        if id(node) in seen:
-            return
-        seen.add(id(node))
-        if "specialists" in node:
-            errors.append("%s.specialists: nested 'specialists' key not allowed" % path)
-        for key, value in node.items():
-            _check_nesting(value, "%s.%s" % (path, key), errors, seen)
-    elif isinstance(node, list):
-        if id(node) in seen:
-            return
-        seen.add(id(node))
-        for j, value in enumerate(node):
-            _check_nesting(value, "%s[%d]" % (path, j), errors, seen)
+def _check_nesting(node: Any, path: str, errors: List[str]) -> None:
+    """E8: flag any nested 'specialists' key below the top level.
+
+    Iterative DFS so user-supplied JSON (e.g. a deep LLM-generated
+    output_schema) cannot blow the call stack. Cycles are guarded by id()
+    for defense-in-depth. When a subtree exceeds MAX_NESTING_DEPTH we emit
+    a single actionable ERROR and keep walking siblings — other rules must
+    still get to run.
+    """
+    seen: set = set()
+    # Stack frame: (node, path, depth, child_iterator_or_None).
+    # child_iter=None means we still need to check the 'specialists' key
+    # / enter the dict-or-list; once set, we yield child frames from it.
+    stack: List[Tuple[Any, str, int, Any]] = [(node, path, 1, None)]
+
+    while stack:
+        cur, cur_path, depth, it = stack[-1]
+
+        # First time at this node: run per-node checks, then build the
+        # child iterator. We split "check" from "expand" by peeking it.
+        if it is None:
+            nid = id(cur)
+            if nid in seen:
+                stack.pop()
+                continue
+            seen.add(nid)
+
+            if depth > MAX_NESTING_DEPTH:
+                errors.append(
+                    "%s: nested structure exceeds maximum depth (limit %d)"
+                    % (cur_path, MAX_NESTING_DEPTH))
+                stack.pop()
+                continue
+
+            if isinstance(cur, dict):
+                if "specialists" in cur:
+                    errors.append(
+                        "%s.specialists: nested 'specialists' key not allowed"
+                        % cur_path)
+                # Push children; we mark this frame done by storing the empty
+                # iterator so the next pop returns cleanly.
+                stack[-1] = (cur, cur_path, depth, iter(cur.items()))
+                continue
+            if isinstance(cur, list):
+                stack[-1] = (cur, cur_path, depth, iter(enumerate(cur)))
+                continue
+            # Scalars: nothing more to do.
+            stack.pop()
+            continue
+
+        # We've already inspected this node at entry; yield next child.
+        nxt = next(it, None)
+        if nxt is None:
+            stack.pop()
+            continue
+        # Both dict.items() and enumerate() return 2-tuples, so unpack uniformly.
+        key_or_idx, child_value = nxt
+        if isinstance(cur, dict):
+            new_path = "%s.%s" % (cur_path, key_or_idx)
+        else:
+            new_path = "%s[%d]" % (cur_path, key_or_idx)
+        stack.append((child_value, new_path, depth + 1, None))
 
 
 def validate(plan: Any) -> Tuple[List[str], List[str]]:
@@ -144,9 +211,10 @@ def validate(plan: Any) -> Tuple[List[str], List[str]]:
     # E2 + E3: count and per-specialist fields.
     by_id: Dict[str, int] = {}
     if specialists is not None:
-        if not 3 <= len(specialists) <= 15:
+        if not MIN_SPECIALISTS <= len(specialists) <= MAX_SPECIALISTS:
             errors.append(
-                "specialists: must have 3-15 entries, got %d" % len(specialists))
+                "specialists: must have %d-%d entries, got %d"
+                % (MIN_SPECIALISTS, MAX_SPECIALISTS, len(specialists)))
         seen_ids = set()
         for i, spec in enumerate(specialists):
             path = "specialists[%d]" % i
@@ -269,18 +337,15 @@ def validate(plan: Any) -> Tuple[List[str], List[str]]:
 
     # E7: reviewer rule.
     if specialists is not None:
-        def _is_reviewer(spec: Any) -> bool:
-            role = spec.get("role") if isinstance(spec, dict) else None
-            return (isinstance(role, str)
-                    and (role == "critic" or role.startswith("reviewer-")))
-
-        if not any(_is_reviewer(spec) for spec in specialists):
+        if not any(
+                _is_reviewer(spec.get("role")) if isinstance(spec, dict) else False
+                for spec in specialists):
             errors.append(
                 "specialists: plan must include at least one reviewer-* or critic role")
 
     # E8: nesting guard.
     for top_key, top_val in plan.items():
-        _check_nesting(top_val, top_key, errors, set())
+        _check_nesting(top_val, top_key, errors)
 
     return (errors, warnings)
 
@@ -405,8 +470,10 @@ def main(argv=None) -> int:
         description="Validate a multi-agent-orchestrator plan JSON file.")
     parser.add_argument("plan", nargs="?", default=None,
                         help="Path to the plan JSON file")
-    parser.add_argument("--quiet", action="store_true",
-                        help="Suppress PLAN_VALID chatter (never errors/warnings)")
+    parser.add_argument(
+        "--quiet", action="store_true",
+        help=("Suppress PLAN_VALID chatter only; "
+              "errors and warnings are always printed"))
     parser.add_argument("--self-test", action="store_true",
                         help="Run built-in fixtures covering every E-rule")
     args = parser.parse_args(argv)
