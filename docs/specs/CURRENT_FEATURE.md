@@ -2,28 +2,27 @@
 
 ## In progress
 
-### 2.6 — Per-call token estimate surfaced in log
+### (none — Phase 2 MVP shipped via PR #15; awaiting Phase 3 spec or Phase 2 polish)
 
-- Spec: `docs/specs/phase-2/2.6-token-estimates.md` (to be drafted)
-- Branch: `feat/2.6-token-estimates`
-- Status: implementer dispatch pending
-- Gate: each per-specialist trace record gets a `token_estimate: int`
-  field (default 0; set via the existing `--cost-per-call` × an internal
-  per-call token model in Phase 2, replaced by a real provider
-  estimate in Phase 3). `scripts/write_log.py`'s per-specialist H3
-  sections surface the estimate alongside `elapsed_ms`. Self-test
-  extensions. Two-stage review + controller green; squash-merged
-  via PR.
+- Status: implementer dispatch pending for Phase 3 OR Phase 2 polish. Both
+  repos are green: validate_plan 16/16, validate_schema 22/22, write_log
+  8/8, plan_preview 13/13, dispatch 15/15, run_tests 39/39, F1.x untouched.
+  Recommend pausing here for a human review of the full Phase 1+2 tree
+  before drafting Phase 3.
 
 ## Completion log (append-only — newest at bottom)
 
-- 2026-10-10 — 2.5 done: real resolve_model + cost-budget abort merged as dae6e66 via PR #14 (squash).
-  Spec PASS, all 5 adversarial probes (large-spec cost, env+config tier
-  ordering, nested YAML silently skipped, 0-spec validator E2 path,
-  independence). 4-tier chain verified end-to-end (option / env / config /
-  default). D31–D34 verified. F2.3 preview shape gain: one new
-  `Estimated cost:` line. Phase 2 5/6 done. Last: F2.6 (token estimates
-  surfaced in the log).
+- 2026-10-10 — 2.6 done: per-call token estimate merged as fbcc855 via PR #15 (squash).
+  Spec PASS, all 5 adversarial probes (a–e). D35–D37 verified. Token-stamp
+  pass runs unconditionally so --no-schema-check still gets the field.
+  **Phase 2 MVP shipped.** 15 PRs total across Phase 1 (10) + Phase 2 (5);
+  full test surface green: validate_plan 16/16, validate_schema 22/22,
+  write_log 8/8, plan_preview 13/13, dispatch 15/15, run_tests 39/39.
+  Open carry-forwards into Phase 3: (a) F1.6 synthesis output_schema content
+  (quality minor 3 from PR #1); (b) the F2.6 token approximation is a stub
+  waiting for real provider estimates; (c) the F1.9 /orchestrate slash
+  command lives on a local Hermes feature branch, not pushed upstream
+  (user approval needed).
 
 ## Completion log (append-only — newest at bottom)
 

@@ -42,7 +42,7 @@ parallel options are intentionally unused until the user says otherwise.
 | 2.3 | [phase-2/2.3-dry-run.md](phase-2/2.3-dry-run.md) — `--dry-run` plan preview (`scripts/plan_preview.py` + dispatch flag) | done | 2.1, 2.2 | 2.4 | PR #12 (merged 49104f3) |
 | 2.4 | [phase-2/2.4-output-schema-enforcement.md](phase-2/2.4-output-schema-enforcement.md) — `output_schema` content enforcement (per-specialist JSON Schema, F1.6 gap rule integration) | done | 1.6 | 2.5 | PR #13 (merged ab8c7b5) |
 | 2.5 | [phase-2/2.5-cost-budget-and-real-resolver.md](phase-2/2.5-cost-budget-and-real-resolver.md) — Cost-budget abort + real 4-tier `resolve_model` (`scripts/plan_preview.py` + dispatch flags) | done | 2.1, 2.2, 2.4 | nothing | PR #14 (merged dae6e66) |
-| 2.6 | (unwritten) — per-call token estimate surfaced in log | pending | nothing | nothing | TBD |
+| 2.6 | [phase-2/2.6-token-estimates.md](phase-2/2.6-token-estimates.md) — Per-call token estimate surfaced in trace + log (`--tokens-per-char N`, `Total estimated tokens: N` in aggregate) | done | nothing | nothing | PR #15 (merged fbcc855) |
 
 Critical path: 2.1 + 2.2 → 2.3 → (2.5 in parallel with 2.3). F2.1 and F2.2 are
 both docs-only and share the same `references/model-resolution.md`; the
