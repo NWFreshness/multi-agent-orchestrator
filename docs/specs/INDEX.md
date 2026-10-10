@@ -19,8 +19,8 @@ answer with ≥2 specialist outputs visible in the orchestration log.
 | 1.3 | [phase-1/1.3-archetype-catalog.md](phase-1/1.3-archetype-catalog.md) — Static archetype catalog (`references/archetypes.md`) | done | 1.1 | 1.4 | PR #3 (merged 43264df) |
 | 1.4 | [phase-1/1.4-plan-parse-validate.md](phase-1/1.4-plan-parse-validate.md) — Plan validator CLI (`scripts/validate_plan.py`, stdlib-only, `--self-test`) | done | 1.2, 1.3 | 1.5 | PR #4 (merged 5f5440f) |
 | 1.5 | [phase-1/1.5-batch-dispatch.md](phase-1/1.5-batch-dispatch.md) — Batch dispatcher CLI (`scripts/dispatch.py` + `scripts/run_specialist.py`, stdlib-only, parallel batches) | done | 1.4 | 1.6, 1.7, 1.8 | PR #5 (merged 4f2c3ee) |
-| 1.6 | [phase-1/1.6-synthesis.md](phase-1/1.6-synthesis.md) — Synthesis contract (`references/synthesis.md`; 4-field output JSON, gap rules, confidence rubric) | in-progress | 1.5 | 1.7, 1.8 | PR `feat/1.6-synthesis` |
-| 1.7 | phase-1/1.7-error-recovery.md — retry-once, gap flagging, `failed_specialists` | planned | 1.5, 1.6 | 1.9 | PR `feat/1.7-error-recovery` |
+| 1.6 | [phase-1/1.6-synthesis.md](phase-1/1.6-synthesis.md) — Synthesis contract (`references/synthesis.md`; 4-field output JSON, gap rules, confidence rubric) | done | 1.5 | 1.7, 1.8 | PR #6 (merged 0be17ed) |
+| 1.7 | [phase-1/1.7-error-recovery.md](phase-1/1.7-error-recovery.md) — Error recovery (`scripts/dispatch.py` retry-once + gap flagging per F1.6) | in-progress | 1.5, 1.6 | 1.9 | PR `feat/1.7-error-recovery` |
 | 1.8 | phase-1/1.8-orchestration-log.md — orchestration-log writer | planned | 1.5, 1.6 | 1.9 | PR `feat/1.8-orchestration-log` |
 | 1.9 | phase-1/1.9-slash-command.md — `/orchestrate` registration | planned | 1.1–1.8 | 1.10 | PR `feat/1.9-slash-command` |
 | 1.10 | phase-1/1.10-tests.md — unit + integration tests, deterministic mocks | planned | 1.1–1.9 | nothing | PR `feat/1.10-tests` |

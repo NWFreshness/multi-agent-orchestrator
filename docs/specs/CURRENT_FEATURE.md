@@ -2,16 +2,19 @@
 
 ## In progress
 
-### 1.6 — Synthesis contract (`references/synthesis.md`)
+### 1.7 — Error recovery (retry-once, gap flagging) in `scripts/dispatch.py`
 
-- Spec: `docs/specs/phase-1/1.6-synthesis.md`
-- Branch: `feat/1.6-synthesis` (implementer creates from `main`)
+- Spec: `docs/specs/phase-1/1.7-error-recovery.md`
+- Branch: `feat/1.7-error-recovery` (implementer creates from `main`)
 - Status: implementer dispatch pending
-- Gate: `references/synthesis.md` with 6 subsections (re-invocation, input
-  shape, 4-field output JSON, gap rules a–d, 4-row confidence rubric,
-  not-list); worked high/low examples; SKILL.md pointer clause only;
-  regressions green (1.4 validator 15/15, 1.5 dispatcher 4/4); two-stage
-  review passed; squash-merged via PR.
+- Gate: extends `scripts/dispatch.py` with `--max-retries 1` (default 1) and
+  `--retry-strategy {restart,continue}`; retry on `failed` specialists
+  (status from F1.5 trace) is one additional `subprocess.run` with the same
+  argv; `--self-test` covers retry-once, retry-exhausted-still-failed, and
+  the no-retry-double-dispatch case; F1.6 contract integration: every
+  `failed_specialists` MUST surface in `gaps` (delegated to F1.8 log writer
+  if needed); existing F1.5 self-test still 4/4; two-stage review passed;
+  squash-merged via PR.
 
 ## Completion log (append-only — newest at bottom)
 
@@ -47,3 +50,8 @@
   must be `cmd; echo $?`, not `cmd | tail; echo $?`. The skill docs are the
   contract; deferred polish (DEFAULT_MAX_PARALLEL, silent simulate:N overflow)
   is tracked, not lost.
+- 2026-10-10 — 1.6 done: synthesis contract merged as 0be17ed via PR #6 (squash).
+  Spec PASS; quality APPROVED after one polish commit (2be298f moved a
+  conflated "high|medium|low" annotation out of a json fence into a markdown
+  table). Both worked examples parse as real JSON; D11/D12 contracts preserved.
+  5/5 quality re-review PASS.
