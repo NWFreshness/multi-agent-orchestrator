@@ -2,29 +2,33 @@
 
 ## In progress
 
-### 2.4 — `output_schema` content enforcement (F2.4 spec + F2.4 implementation)
+### 2.5 — Cost-budget abort + real `resolve_model` implementation
 
-- Spec: `docs/specs/phase-2/2.4-output-schema-enforcement.md` (to be drafted)
-- Branch: `feat/2.4-schema-enforcement`
+- Spec: `docs/specs/phase-2/2.5-cost-budget-and-real-resolver.md` (to be drafted)
+- Branch: `feat/2.5-cost-budget`
 - Status: implementer dispatch pending
-- Gate: per-specialist `output_schema` validated against a real JSON Schema
-  BEFORE dispatch (currently F1.4 validator only checks "is the value a
-  dict?"). Stdlib-only validator; a specialist that returns output not
-  matching its declared schema is treated as a synthesis-time failure
-  (per F1.6 gap rule a: a failed specialist surfaces in `gaps`). Reuses
-  the F1.4 self-test surface for the schema checker; new
-  `scripts/validate_schema.py` module. Two-stage review + controller
-  green; squash-merged via PR.
+- Gate: REPLACES the F2.3 D26 thin stub of `resolve_model(target)` with the
+  full 4-tier chain from F2.1 (options > env > per-profile config >
+  default) — same locked `Tuple[str, str]` signature, source values now
+  include `option` and `config`. Adds `--max-cost N` flag to
+  `scripts/dispatch.py` (default 0 = no budget): when the cumulative
+  estimated cost of the plan's specialists exceeds N, the dispatcher
+  aborts with a clean PLAN_OVER_BUDGET message and exit 2 (usage/IO
+  per F1.5's exit-code contract). Cost is estimated via
+  `--cost-per-call` (default 0.01) × specialist count. F2.5 also adds
+  the `option` tier via a new `--orchestrator-model` /
+  `--subagent-model` pair of CLI flags (the per-call CLI override path).
+  Two-stage review + controller green; squash-merged via PR.
 
 ## Completion log (append-only — newest at bottom)
 
-- 2026-10-10 — 2.3 done: --dry-run plan preview merged as 49104f3 via PR #12 (squash).
-  Spec v1 FAIL on two cosmetic issues (tautological Validated line + duplicate
-  Batch 2 line). Controller applied polish in 9018ff3 (informative Validated
-  count; single-line batch layout with `(depends on <id>)` appended to the
-  dependent specialist). Phase 1 regressions 29/29 still green. F2.3 ships the
-  D26 thin `resolve_model` stub (env + default); F2.5 will replace the body with
-  the full 4-tier chain from F2.1. Next: F2.4 (output_schema content enforcement).
+- 2026-10-10 — 2.4 done: output_schema content enforcement merged as ab8c7b5 via PR #13 (squash).
+  Spec PASS 13/13 with 5 adversarial probes (enum, additionalProperties,
+  oneOf, mixed-failure, plan-time rejection). First Phase 2 code feature.
+  D29 (FROZEN JSON Schema subset, 17 keywords) and D30 (fail-fast per
+  specialist) both verified end-to-end. run_tests.py bumped 29→31
+  (validate_plan 15→16, dispatch 7→8). Next: F2.5 (cost-budget abort +
+  the real resolve_model replacing the F2.3 D26 stub).
 
 ## Completion log (append-only — newest at bottom)
 
