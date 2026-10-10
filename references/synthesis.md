@@ -92,16 +92,14 @@ in place.
 ## 3. Output JSON schema
 
 The Orchestrator returns **exactly one** JSON object with four canonical
-fields. All four are required.
+fields. All four are required. The shape:
 
-```json
-{
-  "answer": "<markdown or plain text — the synthesized result>",
-  "key_points": ["<bullet>", "..."],
-  "confidence": "high|medium|low",
-  "gaps": ["<fact or perspective the synthesis could not confirm>"]
-}
-```
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `answer` | string | yes | synthesized result the user reads; always non-empty; Markdown allowed |
+| `key_points` | list of string | yes | 0+ concise findings |
+| `confidence` | enum | yes | one of: `high`, `medium`, `low` (never null, never a number) |
+| `gaps` | list of string | yes | 0+ entries; see gap-flagging rules in §4 |
 
 Field rules:
 
