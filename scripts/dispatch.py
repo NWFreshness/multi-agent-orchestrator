@@ -173,6 +173,101 @@ def _check_dependency_order(
     return None
 
 
+def _read_specialist_output(output_path: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """Read the JSON written by ``run_specialist.py``.
+
+    Returns ``(parsed_body, error)``. ``parsed_body`` is the dict shape
+    on success and ``None`` on any error. ``error`` is a short,
+    human-readable reason for the failure (None on success).
+    """
+    try:
+        with open(output_path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except FileNotFoundError:
+        return (None, "specialist output file not found: %s" % output_path)
+    except json.JSONDecodeError as exc:
+        return (None, "specialist output is not valid JSON: %s" % exc)
+    except OSError as exc:
+        return (None, "cannot read specialist output: %s" % exc)
+    if not isinstance(data, dict):
+        return (None, "specialist output is not a JSON object")
+    return (data, None)
+
+
+def _apply_schema_check(
+    trace: List[Dict[str, Any]],
+    specialists: List[Dict[str, Any]],
+    validate_fn,
+) -> List[Dict[str, Any]]:
+    """F2.4 post-dispatch per-specialist schema check (D30).
+
+    For each specialist's FINAL trace record (the last entry per
+    ``(batch, id)`` — i.e. the post-retry result, not the intermediate
+    retry attempts), open its ``output_path``, parse the JSON, and
+    validate the ``output`` field against the specialist's declared
+    ``output_schema``. ``validate_fn`` is the project-local
+    ``validate_against_schema`` callable injected at call time to keep
+    this module's top-level imports stdlib-only.
+
+    Mutates each final record in place:
+      - successful match → add ``schema_ok: true``
+      - failure → set ``status: failed`` + ``error: "output_schema
+        mismatch: <reason>"``. ``schema_ok`` is NOT set on failure so
+        a single boolean answers "did the output match?".
+
+    Other trace records (retry attempts) are left untouched — D30
+    specifies the check is on the FINAL output per specialist. Per
+    D30, a failed check does NOT cancel the rest of the trace.
+    """
+    schema_by_id = {spec.get("id"): spec.get("output_schema")
+                    for spec in specialists if isinstance(spec, dict)}
+    # Last trace line per (batch, id) — same rule as ``_final_records_by_id``.
+    final_indices: Dict[Tuple[int, str], int] = {}
+    for i, r in enumerate(trace):
+        key = (r.get("batch", -1), r.get("id", ""))
+        if key not in final_indices:
+            final_indices[key] = i
+        else:
+            ts_old = trace[final_indices[key]].get("ts", "")
+            ts_new = r.get("ts", "")
+            if ts_new >= ts_old:
+                final_indices[key] = i
+    for (b, sid), idx in final_indices.items():
+        record = trace[idx]
+        if record.get("status") != "ok":
+            # The specialist's run already failed; no need to re-check.
+            continue
+        schema = schema_by_id.get(sid)
+        if not isinstance(schema, dict):
+            # No declared schema (or non-dict — already flagged by E3).
+            # Skip without stamping schema_ok.
+            continue
+        output_path = record.get("output_path")
+        if not output_path:
+            # No file to validate; nothing to check.
+            continue
+        body, err = _read_specialist_output(output_path)
+        if err is not None:
+            record["status"] = "failed"
+            record["error"] = "output_schema mismatch: %s" % err
+            continue
+        # F1.5 stub writes the specialist payload fields PLUS ``output`` is
+        # NOT one of them — the stub's body is the metadata echo (id, role,
+        # task, context, output_schema, timestamp, stub). So for a schema
+        # requiring ``answer``, this WILL fail the match — that's the
+        # intended "real check" behavior.
+        assert body is not None  # narrowed by the err != None check above
+        output_value = body.get("output", body)
+        ok, mismatch = validate_fn(output_value, schema)
+        if ok:
+            record["schema_ok"] = True
+        else:
+            record["status"] = "failed"
+            record["error"] = "output_schema mismatch: %s" % (
+                mismatch or "validation error")
+    return trace
+
+
 def _build_specialist_payload(spec: Dict[str, Any]) -> Dict[str, Any]:
     """Trim the F1.4 specialist shape to the F1.5 specialist runner payload."""
     return {
@@ -473,6 +568,7 @@ def dispatch_plan(
     max_retries: int = 1,
     retry_strategy: str = "continue",
     retry_test_overrides: Optional[Dict[str, List[int]]] = None,
+    schema_check: bool = True,
 ) -> Tuple[int, List[Dict[str, Any]]]:
     """Run all batches honoring retry policy. Returns (exit_code, trace_records).
 
@@ -485,6 +581,11 @@ def dispatch_plan(
     callers (``main``) NEVER set it — it lets ``--self-test`` force
     deterministic per-attempt failures without touching ``run_specialist.py``
     or adding a new top-level plan key (which the validator would reject).
+
+    ``schema_check`` (default True, F2.4) toggles the post-dispatch
+    per-specialist ``output_schema`` content check. When False, the
+    check is skipped entirely (no ``schema_ok`` field is added, no
+    schema mismatches are recorded).
     """
     specialists = plan.get("specialists", [])
     batches = plan.get("batches", [])
@@ -544,6 +645,40 @@ def dispatch_plan(
     n_retried = sum(1 for r in trace if r.get("retries", 0) > 0)
     print("dispatch: %d specialists, %d batches, %d failed, %d retried"
           % (n_final_records, len(batches), failed_count, n_retried))
+
+    # F2.4 post-dispatch schema check (D30). Runs AFTER retries are
+    # exhausted but BEFORE the trace is written. Lazily imports the
+    # project-local validator so this module's top-level imports stay
+    # stdlib-only (controller AST check). When schema_check is False
+    # (``--no-schema-check``), this whole block is skipped — no
+    # ``schema_ok`` field is added and no schema mismatches are
+    # recorded.
+    if schema_check:
+        try:
+            scripts_dir_str = str(scripts_dir)
+            if scripts_dir_str not in sys.path:
+                sys.path.insert(0, scripts_dir_str)
+            import validate_schema as _vs  # type: ignore[import-not-found]
+            validate_fn = _vs.validate_against_schema
+        except Exception as exc:  # noqa: BLE001
+            print("error: cannot run schema check (validate_schema "
+                  "import failed: %s)" % exc, file=sys.stderr)
+            return (2, trace)
+        trace = _apply_schema_check(trace, specialists, validate_fn)
+        # Re-derive failed_count so the post-check tally is accurate.
+        failed_count = sum(1 for r in trace
+                           if r.get("status") != "ok"
+                           and r.get("batch", -1) >= 0)
+        n_final_records = len({(r["batch"], r["id"]) for r in trace})
+        n_schema_failed = sum(
+            1 for r in trace
+            if r.get("status") == "failed"
+            and isinstance(r.get("error"), str)
+            and r["error"].startswith("output_schema mismatch"))
+        print("dispatch: %d specialists, %d batches, %d failed, %d retried, "
+              "%d schema-mismatch"
+              % (n_final_records, len(batches), failed_count, n_retried,
+                 n_schema_failed))
 
     # Write the trace atomically — one open/write/close after all batches
     # complete so concurrent workers cannot interleave partial lines.
@@ -803,7 +938,93 @@ def run_self_test(scripts_dir: Path) -> bool:
     else:
         print("SELF_TEST PASS: retry-disabled (max-retries=0 keeps F1.5 byte-for-byte)")
 
-    total = 7
+    # ---- F2.4 post-dispatch schema check (additive) ----
+    # Three specialists, three different declared output_schemas:
+    #   - ``good_obj`` — requires ``{ type: object }``; the stub body IS an
+    #     object → schema_ok: true, status: ok.
+    #   - ``needs_answer`` — requires an ``answer`` string property; the
+    #     stub body has no ``answer`` field → status flips to failed
+    #     with ``output_schema mismatch: ...`` per D30.
+    #   - ``wrong_type`` — requires an integer; the stub body is an
+    #     object → status flips to failed with a type-mismatch error.
+    # The fixture proves the check is REAL (not a tautology) — every
+    # schema that the stub output fails to match produces a real error.
+    plan_schema = {
+        "task_summary": "schema-check",
+        "specialists": [
+            {"id": "good_obj", "role": "researcher",
+             "goal": "g", "context": "c",
+             "output_schema": {"type": "object"},
+             "tools": ["file"],
+             "model": "opencode-go/deepseek-v4.1-flash"},
+            {"id": "needs_answer", "role": "critic",
+             "goal": "g", "context": "c",
+             "output_schema": {"type": "object",
+                               "properties": {"answer": {"type": "string"}},
+                               "required": ["answer"]},
+             "tools": ["file"],
+             "model": "opencode-go/deepseek-v4.1-flash"},
+            {"id": "wrong_type", "role": "writer",
+             "goal": "g", "context": "c",
+             "output_schema": {"type": "integer"},
+             "tools": ["file"],
+             "model": "opencode-go/deepseek-v4.1-flash"},
+        ],
+        "batches": [[0, 1, 2]],
+        "dependencies": {},
+    }
+    _wipe_logs()
+    specialists_dir_sc = SPECIALIST_LOG_DIR
+    specialists_dir_sc.mkdir(parents=True, exist_ok=True)
+    sc_exit_code, sc_trace = dispatch_plan(
+        plan_schema, max_parallel=4, fail_mode="continue",
+        simulate_n=0, scripts_dir=scripts_dir,
+        specialists_dir=specialists_dir_sc,
+        max_retries=0, retry_strategy="continue",
+        retry_test_overrides=None,
+        schema_check=True)
+    sc_final = _final_records_by_id(sc_trace)
+    good = sc_final.get("good_obj") or {}
+    bad = sc_final.get("needs_answer") or {}
+    wrong = sc_final.get("wrong_type") or {}
+    good_ok = (good.get("status") == "ok"
+               and good.get("schema_ok") is True)
+    bad_failed = (bad.get("status") == "failed"
+                  and isinstance(bad.get("error"), str)
+                  and bad["error"].startswith("output_schema mismatch")
+                  and "answer" in bad["error"])
+    wrong_failed = (wrong.get("status") == "failed"
+                    and isinstance(wrong.get("error"), str)
+                    and wrong["error"].startswith("output_schema mismatch"))
+    if sc_exit_code != 0:
+        failures += 1
+        print("SELF_TEST FAIL: schema-check exit code (expected 0, got %d)"
+              % sc_exit_code)
+    elif not good_ok:
+        failures += 1
+        print("SELF_TEST FAIL: schema-check good_obj not ok+schema_ok "
+              "(got %s)" % good)
+    elif not bad_failed:
+        failures += 1
+        print("SELF_TEST FAIL: schema-check needs_answer should be failed "
+              "with output_schema mismatch (got %s)" % bad)
+    elif not wrong_failed:
+        failures += 1
+        print("SELF_TEST FAIL: schema-check wrong_type should be failed "
+              "with output_schema mismatch (got %s)" % wrong)
+    elif "schema_ok" in bad:
+        failures += 1
+        print("SELF_TEST FAIL: schema-check schema_ok must NOT be set on "
+              "mismatch (got %s)" % bad)
+    elif "schema_ok" in wrong:
+        failures += 1
+        print("SELF_TEST FAIL: schema-check schema_ok must NOT be set on "
+              "mismatch (got %s)" % wrong)
+    else:
+        print("SELF_TEST PASS: post-dispatch schema check "
+              "(good=ok, mismatch=failed with output_schema mismatch error)")
+
+    total = 8
     print("SELF_TEST: %d/%d passed" % (total - failures, total))
     return failures == 0
 
@@ -835,6 +1056,13 @@ def main(argv: Optional[List[str]] = None) -> int:
                         help="Validate + resolve + print the locked F2.3 "
                              "preview shape and exit 0; do NOT dispatch. "
                              "Order-independent with the other flags.")
+    parser.add_argument("--no-schema-check", action="store_true", default=False,
+                        help="F2.4: skip the post-dispatch per-specialist "
+                             "output_schema content check. Order-independent "
+                             "with the other flags. By default the check "
+                             "is ON (a schema mismatch marks the specialist "
+                             "status: failed with an output_schema mismatch "
+                             "error).")
     parser.add_argument("--self-test", action="store_true",
                         help="Run built-in end-to-end fixture")
     args = parser.parse_args(argv)
@@ -906,7 +1134,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         fail_mode=fail_mode, simulate_n=simulate_n,
         scripts_dir=scripts_dir, specialists_dir=specialists_dir,
         max_retries=args.max_retries,
-        retry_strategy=args.retry_strategy)
+        retry_strategy=args.retry_strategy,
+        schema_check=not args.no_schema_check)
     return exit_code
 
 

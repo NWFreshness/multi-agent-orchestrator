@@ -160,7 +160,8 @@ every specialist whose `output` is `null` because the trace marked them
 `failed`) MUST appear as a `gaps` entry. The entry names the specialist id
 and the failure reason in plain language, e.g. `"bench-runner specialist
 failed; benchmark numbers missing."`. This applies even when `answer` does
-not depend on that specialist.
+not depend on that specialist. Schema-mismatch failures (F2.4) count as
+failed specialists for the purpose of this rule.
 
 (b) **Mandatory** — contradictions between specialists' `output` values
 are surfaced in `gaps` with both sides quoted verbatim in the same entry,

@@ -32,17 +32,19 @@ import sys
 PER_SCRIPT_TIMEOUT_SEC = 60.0
 
 
-# Locked by F1.10 spec §"Hard-coded expectations" + D19. DO NOT reorder
-# or recompute; the order + counts are the contract.
+# Locked by F1.10 spec §"Hard-coded expectations" + D19 + F2.4
+# (validate_plan gained an E3 sub-rule fixture; dispatch gained a
+# post-dispatch schema-check fixture). DO NOT reorder or recompute; the
+# order + counts are the contract.
 SUITES = (
-    ("validate_plan.py", 15),
-    ("dispatch.py",       7),
+    ("validate_plan.py", 16),
+    ("dispatch.py",       8),
     ("write_log.py",      7),
 )
 
 SCRIPTS_DIR = "scripts"
 
-EXPECTED_TOTAL = sum(n for _, n in SUITES)  # 29
+EXPECTED_TOTAL = sum(n for _, n in SUITES)  # 31
 
 
 def _run_one(script_name: str, expected: int):
