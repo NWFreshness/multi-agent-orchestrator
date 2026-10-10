@@ -36,7 +36,7 @@ Validate: the parent validates the plan before any dispatch — 3–15 specialis
 
 Batch dispatch: the Orchestrator issues `delegate_task` calls, one array of specialists per batch, respecting dependency edges; independent specialists run in parallel.
 
-Recover: failed or timed-out specialists are retried or re-scoped per the recovery policy; persistent failures are recorded and the synthesis proceeds with available outputs rather than hanging.
+Recover: failed or timed-out specialists are retried once with an adjusted prompt per the error-handling rule (PRD R8); persistent failures are recorded and the synthesis proceeds with available outputs rather than hanging.
 
 Synthesize: the Orchestrator merges specialist outputs into a single answer, noting dissent and confidence where specialists disagree.
 
