@@ -61,3 +61,4 @@ No privilege escalation: specialists receive reduced toolsets appropriate to the
 - `references/orchestration-log.md` — the orchestration log format (defined in F1.8).
 - `references/pools.md` — persistent specialist pool contract + `pools/` examples (defined in F3.1).
 - `references/custom-archetypes.md` — user-defined archetype discovery (`~/.hermes/agents/*.yaml`; defined in F3.2).
+- `references/cache.md` — specialist output cache: content-hash key, `--cache-namespace` / `--cache-ttl-hours` flags, `cached: true` stamp (defined in F3.3).

@@ -29,6 +29,7 @@ Usage:
         [--max-retries N] [--retry-strategy {restart,continue}]
         [--fail-mode {raise,continue,simulate:N}] [--self-test]
         [--tokens-per-char N]
+        [--cache-namespace NAME] [--cache-ttl-hours H]
 
 Exit codes: 0 = every specialist ended ``ok`` OR
 ``failed-with-retries-exhausted`` (continue/simulate path; raise also writes
@@ -404,12 +405,84 @@ def _next_specialist_seq(specialists_dir: Path, specialist_id: str) -> int:
     return highest + 1
 
 
+def _try_cache_lookup(
+    spec: Dict[str, Any],
+    sid: str,
+    role: str,
+    output_path: Path,
+    scripts_dir: Path,
+    namespace: str,
+    ttl_hours: float,
+) -> Optional[Dict[str, Any]]:
+    """F3.3: cache hit path — return an ``ok`` + ``cached: True`` record, else None.
+
+    Never raises: any import / key / IO problem is a miss and the caller
+    falls through to the normal subprocess run (D47).
+    """
+    try:
+        scripts_dir_str = str(scripts_dir)
+        if scripts_dir_str not in sys.path:
+            sys.path.insert(0, scripts_dir_str)
+        specialist_cache = __import__("specialist_cache")
+        key = specialist_cache.cache_key(
+            spec.get("role", ""), spec.get("goal", ""),
+            spec.get("context", ""), spec.get("model", ""),
+            spec.get("output_schema", {}))
+        blob = specialist_cache.lookup(namespace, key, ttl_hours)
+        if blob is None:
+            return None
+        start_ts = _utcnow_iso()
+        try:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(output_path, "wb") as handle:
+                handle.write(blob)
+        except OSError:
+            return None
+        return {"ts": _utcnow_iso(), "started_ts": start_ts,
+                "id": sid, "role": role,
+                "status": "ok", "output_path": str(output_path),
+                "elapsed_ms": 0, "returncode": 0, "cached": True}
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _try_cache_store(
+    spec: Dict[str, Any],
+    output_path: Path,
+    scripts_dir: Path,
+    namespace: str,
+) -> None:
+    """F3.3: miss-store path — persist a fresh stub output, best-effort.
+
+    Never raises; a False from ``store`` is ignored (D47).
+    """
+    try:
+        scripts_dir_str = str(scripts_dir)
+        if scripts_dir_str not in sys.path:
+            sys.path.insert(0, scripts_dir_str)
+        specialist_cache = __import__("specialist_cache")
+        key = specialist_cache.cache_key(
+            spec.get("role", ""), spec.get("goal", ""),
+            spec.get("context", ""), spec.get("model", ""),
+            spec.get("output_schema", {}))
+        try:
+            with open(str(output_path), "rb") as handle:
+                blob = handle.read()
+        except OSError:
+            return
+        specialist_cache.store(namespace, key, blob)
+    except Exception:  # noqa: BLE001
+        return
+
+
 def _run_one(
     spec: Dict[str, Any],
     seq: int,
     specialists_dir: Path,
     scripts_dir: Path,
     force_fail: bool,
+    cache_namespace: str = "",
+    cache_ttl_hours: float = 24.0,
 ) -> Dict[str, Any]:
     """Worker target: shell out to run_specialist.py for one specialist.
 
@@ -419,11 +492,24 @@ def _run_one(
 
     ``retries`` is NOT set here — it's stamped on by the per-specialist loop
     in ``dispatch_plan`` after harvest, using the attempt index.
+
+    F3.3: when ``cache_namespace`` is set and this is not a forced
+    failure, ``lookup()`` runs BEFORE the subprocess — on a hit the
+    cached bytes are written to the seq output_path and an ``ok`` record
+    with ``cached: True`` is returned with no subprocess spawned.
+    After a successful non-forced run the output bytes are ``store()``d
+    best-effort. Forced failures bypass both paths; failed runs are
+    never stored.
     """
     sid = spec.get("id", "")
     role = spec.get("role", "")
     payload = _build_specialist_payload(spec)
     output_path = specialists_dir / ("%s.%d.json" % (sid, seq))
+    if cache_namespace and not force_fail:
+        hit = _try_cache_lookup(spec, sid, role, output_path, scripts_dir,
+                                cache_namespace, cache_ttl_hours)
+        if hit is not None:
+            return hit
     argv = [sys.executable, str(scripts_dir / "run_specialist.py"),
             sid, role, json.dumps(payload)]
     if force_fail:
@@ -459,6 +545,11 @@ def _run_one(
         record["error"] = (stderr_tail[-1] if stderr_tail
                            else "run_specialist.py exited %d"
                            % completed.returncode)
+    # F3.3 miss-store path: after a successful non-forced run, persist
+    # the output bytes best-effort (ignored on failure). Forced runs
+    # and failed runs never touch the cache.
+    if ok and cache_namespace and not force_fail:
+        _try_cache_store(spec, output_path, scripts_dir, cache_namespace)
     return record
 
 
@@ -512,6 +603,8 @@ def _run_attempts_for_spec(
     fail_mode: str,
     max_retries: int,
     retry_test_overrides: Optional[Dict[str, List[int]]],
+    cache_namespace: str = "",
+    cache_ttl_hours: float = 24.0,
 ) -> Tuple[List[Dict[str, Any]], bool]:
     """Run one specialist with up to ``max_retries`` additional attempts.
 
@@ -535,7 +628,8 @@ def _run_attempts_for_spec(
         force = _should_force_fail_for_attempt(
             spec, s_idx_in_batch, attempt_index, simulate_n,
             fail_mode, retry_test_overrides)
-        record = _run_one(spec, seq, specialists_dir, scripts_dir, force)
+        record = _run_one(spec, seq, specialists_dir, scripts_dir, force,
+                          cache_namespace, cache_ttl_hours)
         record["batch"] = batch_index
         # ``retries`` is the count of ADDITIONAL attempts AFTER the first.
         record["retries"] = attempt_index
@@ -566,6 +660,8 @@ def _harvest_with_retries(
     max_retries: int,
     retry_strategy: str,
     retry_test_overrides: Optional[Dict[str, List[int]]],
+    cache_namespace: str = "",
+    cache_ttl_hours: float = 24.0,
 ) -> Tuple[List[Dict[str, Any]], bool, bool]:
     """Run one batch honoring dependencies + retry strategy, return trace + flags.
 
@@ -589,7 +685,8 @@ def _harvest_with_retries(
                     _run_attempts_for_spec,
                     spec, s_idx, batch_index, specialists_dir, scripts_dir,
                     simulate_n, fail_mode, max_retries,
-                    retry_test_overrides)
+                    retry_test_overrides,
+                    cache_namespace, cache_ttl_hours)
                 future_to_spec[fut] = spec
             cancel_batch = False
             for fut in concurrent.futures.as_completed(future_to_spec):
@@ -631,7 +728,8 @@ def _harvest_with_retries(
                     _run_attempts_for_spec,
                     spec, s_idx, batch_index, specialists_dir, scripts_dir,
                     simulate_n, fail_mode, max_retries,
-                    retry_test_overrides)
+                    retry_test_overrides,
+                    cache_namespace, cache_ttl_hours)
                 future_to_spec[fut] = spec
             cancel_batch = False
             for fut in concurrent.futures.as_completed(future_to_spec):
@@ -684,6 +782,8 @@ def dispatch_plan(
     max_cost: float = 0.0,
     cost_per_call: float = 0.01,
     tokens_per_char: float = 0.25,
+    cache_namespace: str = "",
+    cache_ttl_hours: float = 24.0,
 ) -> Tuple[int, List[Dict[str, Any]]]:
     """Run all batches honoring retry policy. Returns (exit_code, trace_records).
 
@@ -715,6 +815,11 @@ def dispatch_plan(
     trace record via ``_apply_token_estimates`` (independent of
     ``schema_check``). When 0, the stamp is 0 on every record
     (disabled). See D36 / D37.
+
+    F3.3 keyword-only kwargs: ``cache_namespace`` (default ``''`` =
+    disabled) and ``cache_ttl_hours`` (default 24.0) thread down to
+    ``_run_one`` for the lookup-before-run / store-after-success
+    paths (same threading shape as F2.6 ``tokens_per_char``).
     """
     specialists = plan.get("specialists", [])
     batches = plan.get("batches", [])
@@ -758,7 +863,9 @@ def dispatch_plan(
         records, cancel, _restart = _harvest_with_retries(
             batch_specs, workers, b_idx, specialists_dir, scripts_dir,
             simulate_n, fail_mode, max_retries, retry_strategy,
-            retry_test_overrides)
+            retry_test_overrides,
+            cache_namespace=cache_namespace,
+            cache_ttl_hours=cache_ttl_hours)
         trace.extend(records)
         failed_count += sum(1 for r in records if r["status"] != "ok")
         if cancel:
@@ -939,6 +1046,13 @@ def run_self_test(scripts_dir: Path) -> bool:
     F1.5). Production ``main()`` never passes this kwarg; live runs of
     ``--fail-mode simulate:0`` continue to use the F1.5 path (the stub
     always fails on the marked index — retries can't bypass it).
+
+    F3.3 cases (additive, total 15→17):
+      - cache-HIT: pre-populate the cache via ``cache_key``, dispatch
+        with that namespace, assert the final record carries
+        ``cached is True`` and the output file bytes == planted bytes.
+      - cache-MISS: fresh namespace → normal run, no ``cached`` flag,
+        and the cache entry file is created for the key.
     """
     failures = 0
 
@@ -1377,7 +1491,128 @@ def run_self_test(scripts_dir: Path) -> bool:
         tokens_path.unlink()
     _wipe_logs()
 
-    total = 15
+    # ---- F3.3 specialist output cache (additive) ----
+    # Fixture HIT: pre-populate the cache via ``cache_key``, dispatch
+    # with that namespace, and assert the final record carries
+    # ``cached is True`` with output bytes == the planted body. The
+    # planted body carries a ``_cache_probe`` marker the stub would
+    # never produce, merged over a stub-shaped body with
+    # ``output_schema {"type": "object"}`` so the F2.4 check passes.
+    # Fixture MISS: a fresh namespace runs normally (no ``cached``
+    # flag) and the cache entry file is created for the key.
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    try:
+        specialist_cache = __import__("specialist_cache")
+    except ImportError as exc:
+        specialist_cache = None  # type: ignore[assignment]
+        failures += 1
+        print("SELF_TEST FAIL: cannot import specialist_cache: %s" % exc)
+    if specialist_cache is not None:
+        hit_ns = "selftest-hit-%d" % os.getpid()
+        hit_spec = {"id": "hitme", "role": "researcher",
+                    "goal": "g-hitme", "context": "c-hitme",
+                    "output_schema": {"type": "object"},
+                    "tools": ["file"],
+                    "model": "opencode-go/deepseek-v4.1-flash"}
+        plan_hit = {"task_summary": "cache-hit",
+                    "specialists": [hit_spec],
+                    "batches": [[0]],
+                    "dependencies": {}}
+        hit_key = specialist_cache.cache_key(
+            "researcher", "g-hitme", "c-hitme",
+            "opencode-go/deepseek-v4.1-flash", {"type": "object"})
+        planted_body = {"id": "hitme", "role": "researcher",
+                        "task": "g-hitme", "context": "c-hitme",
+                        "output_schema": {"type": "object"},
+                        "timestamp": "2026-01-01T00:00:00Z",
+                        "stub": False, "_cache_probe": "HIT-hitme"}
+        planted_bytes = (json.dumps(planted_body, sort_keys=True)
+                         + "\n").encode("utf-8")
+        if not specialist_cache.store(hit_ns, hit_key, planted_bytes):
+            failures += 1
+            print("SELF_TEST FAIL: cache HIT fixture could not pre-populate")
+        else:
+            _wipe_logs()
+            SPECIALIST_LOG_DIR.mkdir(parents=True, exist_ok=True)
+            hit_exit, hit_trace = dispatch_plan(
+                plan_hit, max_parallel=4, fail_mode="continue",
+                simulate_n=0, scripts_dir=scripts_dir,
+                specialists_dir=SPECIALIST_LOG_DIR,
+                max_retries=0, retry_strategy="continue",
+                retry_test_overrides=None,
+                cache_namespace=hit_ns, cache_ttl_hours=24.0)
+            hit_final = _final_records_by_id(hit_trace).get("hitme") or {}
+            try:
+                with open(hit_final.get("output_path") or "", "rb") as _h:
+                    hit_out = _h.read()
+            except OSError:
+                hit_out = b""
+            if hit_exit != 0:
+                failures += 1
+                print("SELF_TEST FAIL: cache HIT exit "
+                      "(expected 0, got %d)" % hit_exit)
+            elif hit_final.get("cached") is not True:
+                failures += 1
+                print("SELF_TEST FAIL: cache HIT record missing cached=True "
+                      "(got %s)" % (hit_final,))
+            elif hit_out != planted_bytes:
+                failures += 1
+                print("SELF_TEST FAIL: cache HIT output != planted bytes")
+            else:
+                print("SELF_TEST PASS: cache HIT "
+                      "(cached=True, output == planted marker)")
+
+        miss_ns = "selftest-miss-%d" % os.getpid()
+        miss_spec = {"id": "missme", "role": "researcher",
+                     "goal": "g-missme", "context": "c-missme",
+                     "output_schema": {"type": "object"},
+                     "tools": ["file"],
+                     "model": "opencode-go/deepseek-v4.1-flash"}
+        plan_miss = {"task_summary": "cache-miss",
+                     "specialists": [miss_spec],
+                     "batches": [[0]],
+                     "dependencies": {}}
+        _wipe_logs()
+        SPECIALIST_LOG_DIR.mkdir(parents=True, exist_ok=True)
+        miss_exit, miss_trace = dispatch_plan(
+            plan_miss, max_parallel=4, fail_mode="continue",
+            simulate_n=0, scripts_dir=scripts_dir,
+            specialists_dir=SPECIALIST_LOG_DIR,
+            max_retries=0, retry_strategy="continue",
+            retry_test_overrides=None,
+            cache_namespace=miss_ns, cache_ttl_hours=24.0)
+        miss_final = _final_records_by_id(miss_trace).get("missme") or {}
+        miss_key = specialist_cache.cache_key(
+            "researcher", "g-missme", "c-missme",
+            "opencode-go/deepseek-v4.1-flash", {"type": "object"})
+        miss_entry = (Path(".cache") / "orchestrator" / miss_ns
+                      / ("%s.json" % miss_key))
+        try:
+            miss_cached_blob = miss_entry.read_bytes()
+        except OSError:
+            miss_cached_blob = b""
+        try:
+            with open(miss_final.get("output_path") or "", "rb") as _h:
+                miss_out = _h.read()
+        except OSError:
+            miss_out = b""
+        if miss_exit != 0:
+            failures += 1
+            print("SELF_TEST FAIL: cache MISS exit "
+                  "(expected 0, got %d)" % miss_exit)
+        elif "cached" in miss_final:
+            failures += 1
+            print("SELF_TEST FAIL: cache MISS record must NOT carry cached "
+                  "(got %s)" % (miss_final,))
+        elif not miss_cached_blob or miss_cached_blob != miss_out:
+            failures += 1
+            print("SELF_TEST FAIL: cache MISS entry not created for the key")
+        else:
+            print("SELF_TEST PASS: cache MISS "
+                  "(normal run, entry stored for the key)")
+
+    total = 17
     print("SELF_TEST: %d/%d passed" % (total - failures, total))
     return failures == 0
 
@@ -1443,6 +1678,17 @@ def main(argv: Optional[List[str]] = None) -> int:
                              "Set to 0 to disable (the trace still carries "
                              "token_estimate=0). Order-independent with the "
                              "other flags.")
+    parser.add_argument("--cache-namespace", default="",
+                        help="F3.3: cache namespace enabling the specialist "
+                             "output cache (default '' = disabled: no cache "
+                             "import, no .cache/ writes, no cached stamps). "
+                             "Must match ^[A-Za-z0-9][A-Za-z0-9_-]*$ "
+                             "(max 64 chars) or dispatch aborts with exit 2.")
+    parser.add_argument("--cache-ttl-hours", type=float, default=24.0,
+                        help="F3.3: cache entry TTL in hours (default 24.0). "
+                             "Entries older than this are re-run + re-stored. "
+                             "<= 0 means entries never expire. "
+                             "Order-independent with the other flags.")
     parser.add_argument("--self-test", action="store_true",
                         help="Run built-in end-to-end fixture")
     args = parser.parse_args(argv)
@@ -1476,6 +1722,25 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("error: --tokens-per-char must be >= 0 (got %r)"
               % args.tokens_per_char, file=sys.stderr)
         return 2
+    # F3.3: invalid namespace is a usage error (F1.5 contract) — error:
+    # + exit 2 before any plan load or dispatch. The cache module is
+    # imported lazily so the disabled path (namespace '') never imports
+    # it (D46).
+    if args.cache_namespace:
+        scripts_dir_ns = str(Path(__file__).resolve().parent)
+        if scripts_dir_ns not in sys.path:
+            sys.path.insert(0, scripts_dir_ns)
+        try:
+            _cache_mod = __import__("specialist_cache")
+            _cache_mod.check_namespace(args.cache_namespace)
+        except ValueError as exc:
+            print("error: --cache-namespace invalid: %s" % exc,
+                  file=sys.stderr)
+            return 2
+        except ImportError as exc:
+            print("error: cannot import specialist_cache from %s: %s"
+                  % (scripts_dir_ns, exc), file=sys.stderr)
+            return 2
 
     fail_mode, simulate_n = args.fail_mode
 
@@ -1548,7 +1813,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         max_retries=args.max_retries,
         retry_strategy=args.retry_strategy,
         schema_check=not args.no_schema_check,
-        tokens_per_char=args.tokens_per_char)
+        tokens_per_char=args.tokens_per_char,
+        cache_namespace=args.cache_namespace,
+        cache_ttl_hours=args.cache_ttl_hours)
     return exit_code
 
 
