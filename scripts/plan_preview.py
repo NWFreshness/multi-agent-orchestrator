@@ -265,7 +265,8 @@ def print_preview(
     print("# Plan preview")
     print("")
     print("- Plan: %s" % plan_path)
-    print("- Validated: yes (validated)")
+    print("- Validated: yes (%d specialists, %d batches, %d warnings)"
+          % (n_spec, n_batch, len(warnings)))
     print("- Orchestrator model: %s (source: %s)" % (orch_model, orch_source))
     print("- Subagent model: %s (source: %s)" % (sub_model, sub_source))
     print("- Specialists: %d (target ~10, range 3-15)" % n_spec)
@@ -302,30 +303,30 @@ def print_preview(
         for b, batch in enumerate(batches):
             if not isinstance(batch, list):
                 continue
-            ids: List[str] = []
-            deps_for_batch: List[str] = []
+            entries: List[str] = []
             for idx in batch:
                 if isinstance(idx, int) and 0 <= idx < len(specialists):
                     spec = specialists[idx]
                     if isinstance(spec, dict):
                         sid = spec.get("id", "")
-                        if isinstance(sid, str):
-                            ids.append(sid)
+                        if isinstance(sid, str) and sid:
+                            entry = sid
                             if isinstance(deps, dict):
                                 prereqs = deps.get(sid, [])
-                                if isinstance(prereqs, list):
-                                    for p in prereqs:
-                                        if isinstance(p, str):
-                                            deps_for_batch.append(p)
-            print("- Batch %d: %s  (parallel)" % (b, ", ".join(ids)))
-            for sid in ids:
-                prereqs = deps.get(sid, []) if isinstance(deps, dict) else []
-                if isinstance(prereqs, list) and prereqs:
-                    prereq_ids = [p for p in prereqs
-                                  if isinstance(p, str) and p in id_to_idx]
-                    if prereq_ids:
-                        print("- Batch %d: %s  (depends on %s)"
-                              % (b, sid, ", ".join(prereq_ids)))
+                                if isinstance(prereqs, list) and prereqs:
+                                    prereq_ids = [p for p in prereqs
+                                                  if isinstance(p, str)
+                                                  and p in id_to_idx]
+                                    if prereq_ids:
+                                        entry = "%s (depends on %s)" % (
+                                            sid, ", ".join(prereq_ids))
+                            entries.append(entry)
+            if entries:
+                if len(entries) == 1 and "(depends on" in entries[0]:
+                    print("- Batch %d: %s" % (b, entries[0]))
+                else:
+                    print("- Batch %d: %s  (parallel)"
+                          % (b, ", ".join(entries)))
     print("")
     print("## Next step")
     print("")
