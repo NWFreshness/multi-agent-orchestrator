@@ -2,16 +2,12 @@
 
 ## In progress
 
-### 3.5 — Async background run mode (last Phase 3 feature)
+### (none — Phase 3 shipped via PR #20; all 21 features done)
 
-- Spec: `docs/specs/phase-3/3.5-background-mode.md` (to be drafted)
-- Branch: `feat/3.5-background-mode`
-- Status: implementer dispatch pending
-- Gate: dispatcher `--background` (detached re-exec, stdio to
-  `logs/background-<ts>.log`, prints `background: pid=<n> ...`
-  handle) + `references/background.md` (D53 detach, D54 dry-run/
-  self-test exclusion, D55 shell owns process). run_tests 53→55.
-  Two-stage review + controller green; squash-merged via PR.
+- Status: no active feature. Full surface green: run_tests 55/55
+  (validate_plan 16, dispatch 21, write_log 8, discover_archetypes 5,
+  specialist_cache 5), validate_schema 22/22, plan_preview 13/13,
+  pools + custom-archetype contracts in place.
 
 ## Completion log (append-only — newest at bottom)
 
@@ -43,6 +39,10 @@
   Spec PASS 8/8 + 5/5 adversarial. Quality APPROVED + controller-applied
   docstring-counts fix. D49–D52 verified. run_tests 53/53.
   Next: F3.5 (background mode — last Phase 3 feature).
+- 2026-10-10 — 3.5 done: background mode merged as cb571e5 via PR #20 (squash).
+  Spec PASS 8/8 + 7/7 adversarial. Quality APPROVED. D53–D55 verified.
+  run_tests 55/55. **Phase 3 shipped — all 21 features done**
+  (10 Phase 1 + 6 Phase 2 + 5 Phase 3, PRs #1–#20).
 
 ## Completion log (append-only — newest at bottom)
 

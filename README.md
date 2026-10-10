@@ -12,7 +12,7 @@ Phase 1 MVP shipped: 10/10 features done. See `docs/specs/INDEX.md` for status a
 | ----- | ------------------------------------------------ | ------ |
 | 1     | MVP, fixed models (Kimi K3 / DeepSeek V4.1 Flash) | Done   |
 | 2     | Model selection & overrides                      | Done |
-| 3     | Advanced (specialist pools, custom archetypes)   | In progress |
+| 3     | Advanced (pools, archetypes, cache, stream, bg)   | Done   |
 
 | Feature | Scope                                    | Status |
 | ------- | ---------------------------------------- | ------ |
@@ -34,7 +34,7 @@ Phase 1 MVP shipped: 10/10 features done. See `docs/specs/INDEX.md` for status a
 | F3.2    | Custom archetypes (`~/.hermes/agents/*.yaml`) | Done |
 | F3.3    | Specialist output cache (TTL + namespaces) | Done |
 | F3.4    | Streaming progress to a file sink | Done |
-| F3.5    | Async background run mode (`--background` detach) | In progress |
+| F3.5    | Async background run mode (`--background` detach) | Done |
 
 > **Note (F1.9):** the `/orchestrate` slash command is registered in the local
 > Hermes checkout (`~/.hermes/hermes-agent`, branch
