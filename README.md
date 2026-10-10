@@ -24,6 +24,7 @@ Phase 1 — foundation: **In progress**. Per-feature status lives in `docs/specs
 | F1.6    | Synthesis contract & output schema   | Done        |
 | F1.7    | Error recovery (retry-once + gaps)   | Done        |
 | F1.8    | Orchestration log writer (PRD R9)    | Done        |
+| F1.9    | `/orchestrate` slash command registration | In progress |
 
 ## Layout
 
