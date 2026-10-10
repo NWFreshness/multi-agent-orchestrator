@@ -4,12 +4,14 @@
 
 ### 3.2 — Custom archetypes via `~/.hermes/agents/*.yaml`
 
-- Spec: `docs/specs/phase-3/3.2-custom-archetypes.md` (to be drafted)
+- Spec: `docs/specs/phase-3/3.2-custom-archetypes.md` (drafted, in-progress)
 - Branch: `feat/3.2-custom-archetypes`
 - Status: implementer dispatch pending
-- Gate: skill discovers user-defined archetype YAMLs alongside the F1.3
-  static catalog and offers them in plan output. Two-stage review +
-  controller green; squash-merged via PR.
+- Gate: `scripts/discover_archetypes.py` (stdlib-only, flat-YAML subset,
+  5 self-tests) + `references/custom-archetypes.md` contract (D41 dir
+  chain, D42 flat shape, D43 skip-with-warning, D44 validator untouched).
+  run_tests 39→44. Two-stage review + controller green; squash-merged
+  via PR.
 
 ## Completion log (append-only — newest at bottom)
 

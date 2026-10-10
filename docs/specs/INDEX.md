@@ -58,7 +58,7 @@ listed order.
 | Feature | Spec | Status | Depends on | Blocks | Lands as |
 | ------- | ---- | ------ | ---------- | ------ | -------- |
 | 3.1 | [phase-3/3.1-specialist-pools.md](phase-3/3.1-specialist-pools.md) — Persistent specialist pools contract + example (`references/pools.md`, `pools/research-trio.json`; advisory, no script changes) | done | nothing | nothing | PR #16 (merged e55c731) |
-| 3.2 | (unwritten) — Custom archetypes via `~/.hermes/agents/*.yaml` | planned | nothing | nothing | TBD |
+| 3.2 | [phase-3/3.2-custom-archetypes.md](phase-3/3.2-custom-archetypes.md) — Custom archetypes via `~/.hermes/agents/*.yaml` (`scripts/discover_archetypes.py` + contract; validator untouched) | in-progress | nothing | nothing | TBD |
 | 3.3 | (unwritten) — Cache layer (in-session + named namespaces) | planned | nothing | nothing | TBD |
 | 3.4 | (unwritten) — Streaming progress to external channels | planned | nothing | nothing | TBD |
 | 3.5 | (unwritten) — Async / background orchestration run mode | planned | nothing | nothing | TBD |
