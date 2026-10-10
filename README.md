@@ -11,8 +11,8 @@ Phase 1 MVP shipped: 10/10 features done. See `docs/specs/INDEX.md` for status a
 | Phase | Scope                                            | Status |
 | ----- | ------------------------------------------------ | ------ |
 | 1     | MVP, fixed models (Kimi K3 / DeepSeek V4.1 Flash) | Done   |
-| 2     | Model selection & overrides                      | In progress |
-| 3     | Advanced (specialist pools, custom archetypes)   | Not started |
+| 2     | Model selection & overrides                      | Done |
+| 3     | Advanced (specialist pools, custom archetypes)   | In progress |
 
 | Feature | Scope                                    | Status |
 | ------- | ---------------------------------------- | ------ |
@@ -29,7 +29,8 @@ Phase 1 MVP shipped: 10/10 features done. See `docs/specs/INDEX.md` for status a
 | F2.3    | `--dry-run` plan preview                 | Done   |
 | F2.4    | `output_schema` content enforcement     | Done   |
 | F2.5    | Cost-budget abort + real `resolve_model` | Done   |
-| F2.6    | Per-call token estimate surfaced in log | In progress |
+| F2.6    | Per-call token estimate surfaced in log | Done   |
+| F3.1    | Persistent specialist pools (named experts) | In progress |
 
 > **Note (F1.9):** the `/orchestrate` slash command is registered in the local
 > Hermes checkout (`~/.hermes/hermes-agent`, branch
