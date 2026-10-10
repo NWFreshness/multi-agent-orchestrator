@@ -261,6 +261,21 @@ def dispatch_plan(
         print("PLAN_INVALID: %s" % violation, file=sys.stderr)
         return (1, [])
 
+    # Defensive out-of-range re-check: validator already enforces that every
+    # index is in range (E4), but a hand-built plan from a future caller may
+    # skip validation. Without this pre-check, the list-indexing in
+    # ``_specialists_for_batch`` would raise IndexError partway through a
+    # batch, dumping a traceback and exiting 1 by accident instead of
+    # returning a clean (1, []) with a PLAN_INVALID message.
+    n_specialists = len(specialists)
+    for b, batch in enumerate(batches):
+        for idx in batch:
+            if not isinstance(idx, int) or idx < 0 or idx >= n_specialists:
+                print("PLAN_INVALID: batches[%d]: index %r out of range "
+                      "(have %d specialists)" % (b, idx, n_specialists),
+                      file=sys.stderr)
+                return (1, [])
+
     specialists_dir.mkdir(parents=True, exist_ok=True)
 
     trace: List[Dict[str, Any]] = []
@@ -302,7 +317,6 @@ def dispatch_plan(
                               "error": "worker exception: %s" % exc,
                               "ts": _utcnow_iso()}
                 record["batch"] = b_idx
-                record.setdefault("ts", _utcnow_iso())
                 trace.append(record)
                 if record["status"] != "ok":
                     failed_count += 1
@@ -432,7 +446,7 @@ def run_self_test(scripts_dir: Path) -> bool:
     else:
         print("SELF_TEST PASS: exit code 0")
 
-    total = 5
+    total = 4
     print("SELF_TEST: %d/%d passed" % (total - failures, total))
     return failures == 0
 
