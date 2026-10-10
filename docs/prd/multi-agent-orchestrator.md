@@ -1,8 +1,8 @@
 # PRD: Multi-Agent Orchestrator Skill for Hermes Agent
 
 **Owner:** Crash (builder profile) / Tyler Mayfield
-**Status:** Draft
-**Last updated:** 2026-10-09
+**Status:** In Build
+**Last updated:** 2026-10-10
 **Target release:** Phase 1 — v0.1 (skill MVP)
 **Links:** `hermes-agent` skill, `subagent-driven-development` skill, `dispatching-parallel-agents` skill
 
@@ -13,6 +13,7 @@
 | Date       | Author | Change                              | Reason / Decision              |
 | ---------- | ------ | ----------------------------------- | ------------------------------ |
 | 2026-10-09 | Crash  | Initial PRD drafted from user brief | Working spec for Phase 1 build |
+| 2026-10-10 | Crash  | Phase 1 build started; PRD → In Build | User green-lit F1.1–F1.10; build scaffolding (specs INDEX, CURRENT_FEATURE) on main |
 
 ---
 
@@ -356,6 +357,7 @@ delegate_task(tasks=[
 | 2026-10-09 | Target ≈ 10 specialists, allow 3–15                                    | Matches user's stated target; allows flexibility               |
 | 2026-10-09 | Default `max_spawn_depth = 2`                                         | Prevents runaway recursion; aligns with SDD precedent          |
 | 2026-10-09 | Synthesizer must produce structured output, not free-form dump      | User said output must be synthesized, not a raw dump           |
+| 2026-10-10 | Skill name `multi-agent-orchestrator`, slash `/orchestrate`         | `orchestrate` / `swarm` / `chorus` as skill name               | User confirmed primary proposal; PRD §15 `name:` corrected in F1.1 spec |
 
 ---
 
