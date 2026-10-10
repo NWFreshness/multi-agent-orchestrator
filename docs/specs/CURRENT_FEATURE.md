@@ -2,16 +2,16 @@
 
 ## In progress
 
-### 3.4 — Streaming progress to a file sink
+### 3.5 — Async background run mode (last Phase 3 feature)
 
-- Spec: `docs/specs/phase-3/3.4-streaming-progress.md` (to be drafted)
-- Branch: `feat/3.4-streaming-progress`
+- Spec: `docs/specs/phase-3/3.5-background-mode.md` (to be drafted)
+- Branch: `feat/3.5-background-mode`
 - Status: implementer dispatch pending
-- Gate: dispatcher `--progress PATH` (per-batch JSONL appends of trace
-  records; best-effort, never fails a run) + `references/streaming.md`
-  (D49 file sink, D50 no Telegram/Slack in skill, D51 never-blocks).
-  run_tests 51→53. Two-stage review + controller green; squash-merged
-  via PR.
+- Gate: dispatcher `--background` (detached re-exec, stdio to
+  `logs/background-<ts>.log`, prints `background: pid=<n> ...`
+  handle) + `references/background.md` (D53 detach, D54 dry-run/
+  self-test exclusion, D55 shell owns process). run_tests 53→55.
+  Two-stage review + controller green; squash-merged via PR.
 
 ## Completion log (append-only — newest at bottom)
 
@@ -39,6 +39,10 @@
   Spec PASS 10/10 + 6/6 adversarial. Race fix (unique probe; controller
   dropped counter + finally-unlink). Quality APPROVED. D45–D48
   verified. run_tests 51/51. Next: F3.4 (streaming progress).
+- 2026-10-10 — 3.4 done: streaming progress sink merged as 2700e1b via PR #19 (squash).
+  Spec PASS 8/8 + 5/5 adversarial. Quality APPROVED + controller-applied
+  docstring-counts fix. D49–D52 verified. run_tests 53/53.
+  Next: F3.5 (background mode — last Phase 3 feature).
 
 ## Completion log (append-only — newest at bottom)
 
