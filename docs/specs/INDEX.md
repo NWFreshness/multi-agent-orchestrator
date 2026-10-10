@@ -15,8 +15,8 @@ answer with ≥2 specialist outputs visible in the orchestration log.
 | Feature | Spec | Status | Depends on | Blocks | Lands as |
 | ------- | ---- | ------ | ---------- | ------ | -------- |
 | 1.1 | [phase-1/1.1-skill-scaffold.md](phase-1/1.1-skill-scaffold.md) — SKILL.md + frontmatter, repo layout, README status | done | nothing | 1.2, 1.3 | PR #1 (merged d4dd0b5) |
-| 1.2 | [phase-1/1.2-orchestrator-spawn.md](phase-1/1.2-orchestrator-spawn.md) — Orchestrator spawn contract + plan JSON schema | in-progress | 1.1 | 1.4 | PR `feat/1.2-orchestrator-spawn` |
-| 1.3 | phase-1/1.3-archetype-catalog.md — `references/archetypes.md` static catalog | planned | 1.1 | 1.4 | PR `feat/1.3-archetype-catalog` |
+| 1.2 | [phase-1/1.2-orchestrator-spawn.md](phase-1/1.2-orchestrator-spawn.md) — Orchestrator spawn contract + plan JSON schema | done | 1.1 | 1.4 | PR #2 (merged 9db85d8) |
+| 1.3 | [phase-1/1.3-archetype-catalog.md](phase-1/1.3-archetype-catalog.md) — Static archetype catalog (`references/archetypes.md`) | in-progress | 1.1 | 1.4 | PR `feat/1.3-archetype-catalog` |
 | 1.4 | phase-1/1.4-plan-parse-validate.md — plan parsing + validation (roles/deps/batches/depth≤2) | planned | 1.2, 1.3 | 1.5 | PR `feat/1.4-plan-parse-validate` |
 | 1.5 | phase-1/1.5-batch-dispatch.md — batch dispatch via `delegate_task` arrays | planned | 1.4 | 1.6, 1.7, 1.8 | PR `feat/1.5-batch-dispatch` |
 | 1.6 | phase-1/1.6-synthesis.md — synthesizer step, structured output | planned | 1.5 | 1.7, 1.8 | PR `feat/1.6-synthesis` |
