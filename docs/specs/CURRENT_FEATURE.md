@@ -2,33 +2,28 @@
 
 ## In progress
 
-### 2.5 — Cost-budget abort + real `resolve_model` implementation
+### 2.6 — Per-call token estimate surfaced in log
 
-- Spec: `docs/specs/phase-2/2.5-cost-budget-and-real-resolver.md` (to be drafted)
-- Branch: `feat/2.5-cost-budget`
+- Spec: `docs/specs/phase-2/2.6-token-estimates.md` (to be drafted)
+- Branch: `feat/2.6-token-estimates`
 - Status: implementer dispatch pending
-- Gate: REPLACES the F2.3 D26 thin stub of `resolve_model(target)` with the
-  full 4-tier chain from F2.1 (options > env > per-profile config >
-  default) — same locked `Tuple[str, str]` signature, source values now
-  include `option` and `config`. Adds `--max-cost N` flag to
-  `scripts/dispatch.py` (default 0 = no budget): when the cumulative
-  estimated cost of the plan's specialists exceeds N, the dispatcher
-  aborts with a clean PLAN_OVER_BUDGET message and exit 2 (usage/IO
-  per F1.5's exit-code contract). Cost is estimated via
-  `--cost-per-call` (default 0.01) × specialist count. F2.5 also adds
-  the `option` tier via a new `--orchestrator-model` /
-  `--subagent-model` pair of CLI flags (the per-call CLI override path).
-  Two-stage review + controller green; squash-merged via PR.
+- Gate: each per-specialist trace record gets a `token_estimate: int`
+  field (default 0; set via the existing `--cost-per-call` × an internal
+  per-call token model in Phase 2, replaced by a real provider
+  estimate in Phase 3). `scripts/write_log.py`'s per-specialist H3
+  sections surface the estimate alongside `elapsed_ms`. Self-test
+  extensions. Two-stage review + controller green; squash-merged
+  via PR.
 
 ## Completion log (append-only — newest at bottom)
 
-- 2026-10-10 — 2.4 done: output_schema content enforcement merged as ab8c7b5 via PR #13 (squash).
-  Spec PASS 13/13 with 5 adversarial probes (enum, additionalProperties,
-  oneOf, mixed-failure, plan-time rejection). First Phase 2 code feature.
-  D29 (FROZEN JSON Schema subset, 17 keywords) and D30 (fail-fast per
-  specialist) both verified end-to-end. run_tests.py bumped 29→31
-  (validate_plan 15→16, dispatch 7→8). Next: F2.5 (cost-budget abort +
-  the real resolve_model replacing the F2.3 D26 stub).
+- 2026-10-10 — 2.5 done: real resolve_model + cost-budget abort merged as dae6e66 via PR #14 (squash).
+  Spec PASS, all 5 adversarial probes (large-spec cost, env+config tier
+  ordering, nested YAML silently skipped, 0-spec validator E2 path,
+  independence). 4-tier chain verified end-to-end (option / env / config /
+  default). D31–D34 verified. F2.3 preview shape gain: one new
+  `Estimated cost:` line. Phase 2 5/6 done. Last: F2.6 (token estimates
+  surfaced in the log).
 
 ## Completion log (append-only — newest at bottom)
 
