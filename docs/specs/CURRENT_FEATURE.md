@@ -2,15 +2,17 @@
 
 ## In progress
 
-### 1.4 — Plan parsing + validation (`scripts/validate_plan.py`)
+### 1.5 — Batch dispatch (`scripts/dispatch.py`)
 
-- Spec: `docs/specs/phase-1/1.4-plan-parse-validate.md`
-- Branch: `feat/1.4-plan-parse-validate` (implementer creates from `main`)
+- Spec: `docs/specs/phase-1/1.5-batch-dispatch.md`
+- Branch: `feat/1.5-batch-dispatch` (implementer creates from `main`)
 - Status: implementer dispatch pending
-- Gate: stdlib-only CLI validator (exit 0/1/2 contract); enforces E1–E8
-  (shape, count 3–15, 7 fields, batches cover-exactly-once, dep ids/cycles/order,
-  reviewer-required, nesting guard); `--self-test` green; SKILL.md pointer clause
-  only; controller checks green; two-stage review passed; squash-merged via PR.
+- Gate: stdlib-only CLI dispatcher; reads a validated plan, issues
+  `subprocess.run([sys.executable, "scripts/run_specialist.py", json], ...)` per
+  batch in parallel via `concurrent.futures.ThreadPoolExecutor`; deterministic
+  per-specialist logs under `logs/specialists/<id>.<n>.json`; aggregates to
+  `logs/orchestration-trace.jsonl`; exit 0/1/2 contract; controller checks
+  green; two-stage review passed; squash-merged via PR.
 
 ## Completion log (append-only — newest at bottom)
 
@@ -27,3 +29,14 @@
   README drift fix). Toolchain note: host python has no pytest (→ 1.4 ships
   --self-test; 1.10 decides unittest-vs-pytest); jsonschema present but D7 locks
   stdlib-only for skill scripts.
+- 2026-10-10 — 1.4 done: plan validator merged as 5f5440f via PR #4 (squash).
+  Spec PASS after one fix (unhashable dep crash c184be2) + quality APPROVED
+  after second fix (C1 iterative _check_nesting + I2/M1/M2/M4 polish 1b504e2).
+  C1 was a real contract violation: deep nested JSON (depth ≥1500) would
+  RecursionError out of validate() and dump a Python traceback — the
+  pre-dispatch gate must NEVER traceback (SKILL.md §6). Fix: iterative DFS with
+  MAX_NESTING_DEPTH=64, clean ERROR on overflow, sibling scan continues.
+  Lesson: controller probe on depth-200 silently returned PLAN_VALID (no crash,
+  no error) — that itself was wrong and the reviewer caught it. Persisted to
+  subagent-driven-development: a self-test that returns PASS for adversarial
+  input is a false positive, not a green.
