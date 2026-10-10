@@ -1,0 +1,23 @@
+# Node
+node_modules/
+.npm
+.pnpm-store/
+
+# Hermes / orchestration artifacts
+orchestration-log-*.md
+trace.jsonl
+.cache/orchestrator/
+
+# Test/coverage
+coverage/
+.nyc_output/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
