@@ -2,16 +2,16 @@
 
 ## In progress
 
-### 1.9 — `/orchestrate` slash command registration
+### 1.10 — Test suite (`scripts/run_tests.py` driver)
 
-- Spec: `docs/specs/phase-1/1.9-slash-command.md`
-- Branch: `feat/1.9-slash-command` (implementer creates from `main`)
+- Spec: `docs/specs/phase-1/1.10-tests.md`
+- Branch: `feat/1.10-tests` (implementer creates from `main`)
 - Status: implementer dispatch pending
-- Gate: Hermes slash command `orchestrate` registered per `hermes-agent`
-  skill §"Adding a Slash Command" (3 files: `hermes_cli/commands.py`,
-  `cli.py`, optional `gateway/run.py`); accepts `<task>` arg; documented in
-  `hermes skills inspect` output; controller checks green; two-stage review
-  passed; squash-merged via PR.
+- Gate: stdlib-only `scripts/run_tests.py` that invokes each existing
+  per-script `--self-test` in order (validate_plan 15, dispatch 7,
+  write_log 7), aggregates results, exits 0 only if every suite passes;
+  README updated; F1.9 restart note already in place; controller checks
+  green; two-stage review passed; squash-merged via PR. Phase 1 done.
 
 ## Completion log (append-only — newest at bottom)
 
@@ -64,3 +64,10 @@
  all 4 flips in a single amend. No behavior changes. No M1/M2 fixes (cosmetic,
  out of PR scope). Phase 1 is now 8/10 — only the slash command (1.9) and
  the test suite (1.10) remain before MVP ships.
+ - 2026-10-10 — 1.9 done: /orchestrate slash command merged as 903a233 via PR #9 (squash).
+ Spec PASS 14/14; quality APPROVED with 2 minor follow-ups (restart
+ dependency + README status flip) — controller applied both in the same
+ amend. Local Hermes registration lives on
+ `~/.hermes/hermes-agent/feat/orchestrate-slash-command` @ c646cea433
+ (NOT pushed to NousResearch; user approval needed). 1.10 is the last
+ feature — test driver. After that, Phase 1 MVP ships.
