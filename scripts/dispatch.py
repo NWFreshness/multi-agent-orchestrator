@@ -831,6 +831,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                         default=("raise", 0),
                         help="raise (default) | continue | simulate:N. "
                              "raise cancels remaining retries too (F1.7)")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Validate + resolve + print the locked F2.3 "
+                             "preview shape and exit 0; do NOT dispatch. "
+                             "Order-independent with the other flags.")
     parser.add_argument("--self-test", action="store_true",
                         help="Run built-in end-to-end fixture")
     args = parser.parse_args(argv)
@@ -870,6 +874,29 @@ def main(argv: Optional[List[str]] = None) -> int:
         for error in errors:
             print("ERROR: %s" % error)
         return 1
+
+    # F2.3 dry-run: validate + resolve + print, then EXIT before the
+    # dispatch loop. No trace is written, no specialist is spawned, no
+    # log directory is created. argparse made the flag
+    # order-independent (action="store_true" with no positional
+    # interaction), so `--dry-run` works in any argv position.
+    if args.dry_run:
+        scripts_dir = Path(__file__).resolve().parent
+        if str(scripts_dir) not in sys.path:
+            sys.path.insert(0, str(scripts_dir))
+        try:
+            plan_preview = __import__("plan_preview")
+        except ImportError as exc:
+            print("error: cannot import plan_preview from %s: %s"
+                  % (scripts_dir, exc), file=sys.stderr)
+            return 2
+        resolved = {"orchestrator": plan_preview.resolve_model("orchestrator"),
+                    "subagent": plan_preview.resolve_model("subagent")}
+        preview_warnings = plan_preview._compute_warnings(
+            plan, warnings, resolved["subagent"][0])
+        plan_preview.print_preview(
+            plan, args.plan, resolved, preview_warnings)
+        return 0
 
     scripts_dir = Path(__file__).resolve().parent
     specialists_dir = SPECIALIST_LOG_DIR

@@ -11,7 +11,7 @@ Phase 1 MVP shipped: 10/10 features done. See `docs/specs/INDEX.md` for status a
 | Phase | Scope                                            | Status |
 | ----- | ------------------------------------------------ | ------ |
 | 1     | MVP, fixed models (Kimi K3 / DeepSeek V4.1 Flash) | Done   |
-| 2     | Model selection & overrides                      | Not started |
+| 2     | Model selection & overrides                      | In progress |
 | 3     | Advanced (specialist pools, custom archetypes)   | Not started |
 
 | Feature | Scope                                    | Status |
@@ -26,6 +26,7 @@ Phase 1 MVP shipped: 10/10 features done. See `docs/specs/INDEX.md` for status a
 | F1.8    | Orchestration log writer (PRD R9)        | Done   |
 | F1.9    | /orchestrate slash command registration | Done   |
 | F1.10   | Test driver (`scripts/run_tests.py`)    | Done   |
+| F2.3    | `--dry-run` plan preview                 | In progress |
 
 > **Note (F1.9):** the `/orchestrate` slash command is registered in the local
 > Hermes checkout (`~/.hermes/hermes-agent`, branch
