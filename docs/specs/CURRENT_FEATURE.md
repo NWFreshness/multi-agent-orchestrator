@@ -2,9 +2,16 @@
 
 ## In progress
 
-### (none — Phase 1 MVP shipped via PR #10; awaiting Phase 2 spec)
+### 2.1 — Model resolution chain (options → env → config → default)
 
-- Status: implementer dispatch pending for Phase 2 (model selection & overrides)
+- Spec: `docs/specs/phase-2/2.1-model-resolution.md`
+- Status: specs drafting (this PR); no implementer dispatch yet
+- Sibling: 2.2 ships the same PR (`feat/2.1-2.2-phase-2-specs`) — both
+  docs-only, both lock the 4-tier chain (D22) + independence (D21) so F2.3
+  / F2.5 can import `resolve_model()`.
+- Roll-over rule: this branch commits `pending` → `in_progress` for F2.1
+  (and F2.2) on the same commit that lands the spec bodies. Squash-merging
+  flips both to `done` and clears this block for the implementer dispatch.
 
 ## Completion log (append-only — newest at bottom)
 

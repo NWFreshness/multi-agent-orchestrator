@@ -14,6 +14,7 @@
 | ---------- | ------ | ----------------------------------- | ------------------------------ |
 | 2026-10-09 | Crash  | Initial PRD drafted from user brief | Working spec for Phase 1 build |
 | 2026-10-10 | Crash  | Phase 1 build started; PRD → In Build | User green-lit F1.1–F1.10; build scaffolding (specs INDEX, CURRENT_FEATURE) on main |
+| 2026-10-10 | Crash  | Phase 2 spec authoring started; F2.1 + F2.2 specs drafted | F2.1/F2.2 are docs-only (no script changes); codify D20–D25 so F2.3/F2.5 can import `resolve_model()` |
 
 ---
 
@@ -358,6 +359,12 @@ delegate_task(tasks=[
 | 2026-10-09 | Default `max_spawn_depth = 2`                                         | Prevents runaway recursion; aligns with SDD precedent          |
 | 2026-10-09 | Synthesizer must produce structured output, not free-form dump      | User said output must be synthesized, not a raw dump           |
 | 2026-10-10 | Skill name `multi-agent-orchestrator`, slash `/orchestrate`         | `orchestrate` / `swarm` / `chorus` as skill name               | User confirmed primary proposal; PRD §15 `name:` corrected in F1.1 spec |
+| 2026-10-10 | D20: Phase 2 adds user-visible model selection but does NOT change the default — Phase 1 default stays the floor unless user opts in | "no surprise" rule; backward-compatible; matches the Phase 1 ship posture |
+| 2026-10-10 | D21: Orchestrator and subagent model overrides are resolved INDEPENDENTLY — overriding one MUST NOT change the other | Two separate resolution chains; user can target a fast Orchestrator + cheap subagent without coupling |
+| 2026-10-10 | D22: Resolution chain (locked, first match wins) = options (skill / CLI flag) > env var (`HERMES_ORCHESTRATOR_MODEL` / `HERMES_SUBAGENT_MODEL`) > per-profile config > Phase 1 default | Single resolution helper (`resolve_model(target)`) exposed for import so F2.3 (`--dry-run`) and F2.5 (cost abort) reuse it |
+| 2026-10-10 | D23: Phase 2 does NOT add a TUI / UI for model selection | PRD §6 tripwire still stands — env var / config / option only |
+| 2026-10-10 | D24: Phase 2 stays stdlib-only at the script boundary | F2.1 + F2.2 are docs-only (no scripts); F2.5+ inherits the stdlib-only rule when it introduces `resolve_model()` |
+| 2026-10-10 | D25: F2.1 and F2.2 specs mirror the Phase 1 feature-spec template verbatim | Same template = same review surface = same controller verification surface |
 
 ---
 
