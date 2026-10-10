@@ -7,6 +7,9 @@ node_modules/
 orchestration-log-*.md
 trace.jsonl
 .cache/orchestrator/
+logs/                          # F1.5 dispatcher writes specialists/* and orchestration-trace.jsonl here
+**/__pycache__/                 # Python bytecode from local probing
+*.pyc
 
 # Test/coverage
 coverage/

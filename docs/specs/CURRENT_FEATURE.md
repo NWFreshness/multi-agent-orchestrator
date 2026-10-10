@@ -2,17 +2,16 @@
 
 ## In progress
 
-### 1.5 — Batch dispatch (`scripts/dispatch.py`)
+### 1.6 — Synthesis contract (`references/synthesis.md`)
 
-- Spec: `docs/specs/phase-1/1.5-batch-dispatch.md`
-- Branch: `feat/1.5-batch-dispatch` (implementer creates from `main`)
+- Spec: `docs/specs/phase-1/1.6-synthesis.md`
+- Branch: `feat/1.6-synthesis` (implementer creates from `main`)
 - Status: implementer dispatch pending
-- Gate: stdlib-only CLI dispatcher; reads a validated plan, issues
-  `subprocess.run([sys.executable, "scripts/run_specialist.py", json], ...)` per
-  batch in parallel via `concurrent.futures.ThreadPoolExecutor`; deterministic
-  per-specialist logs under `logs/specialists/<id>.<n>.json`; aggregates to
-  `logs/orchestration-trace.jsonl`; exit 0/1/2 contract; controller checks
-  green; two-stage review passed; squash-merged via PR.
+- Gate: `references/synthesis.md` with 6 subsections (re-invocation, input
+  shape, 4-field output JSON, gap rules a–d, 4-row confidence rubric,
+  not-list); worked high/low examples; SKILL.md pointer clause only;
+  regressions green (1.4 validator 15/15, 1.5 dispatcher 4/4); two-stage
+  review passed; squash-merged via PR.
 
 ## Completion log (append-only — newest at bottom)
 
@@ -40,3 +39,11 @@
   no error) — that itself was wrong and the reviewer caught it. Persisted to
   subagent-driven-development: a self-test that returns PASS for adversarial
   input is a false positive, not a green.
+- 2026-10-10 — 1.5 done: batch dispatcher merged as 4f2c3ee via PR #5 (squash).
+  Spec PASS; quality REQUEST_CHANGES (1 Important: IndexError on out-of-range
+  batch index; 4 Minor) → fix ff322ba closed the gap + 2 free wins; quality
+  re-review APPROVED. Two probes the controller got wrong (via `| tail` pipe
+  capturing tail's exit) cost a false-positive cycle: real ExitCode capture
+  must be `cmd; echo $?`, not `cmd | tail; echo $?`. The skill docs are the
+  contract; deferred polish (DEFAULT_MAX_PARALLEL, silent simulate:N overflow)
+  is tracked, not lost.
