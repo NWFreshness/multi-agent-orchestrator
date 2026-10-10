@@ -36,7 +36,7 @@ Validate: the parent validates the plan before any dispatch — 3–15 specialis
 
 Batch dispatch: the Orchestrator issues `delegate_task` calls, one array of specialists per batch, respecting dependency edges; independent specialists run in parallel. Run scripts/dispatch.py PLAN.json (exit 0 = every specialist ran, trace in logs/orchestration-trace.jsonl).
 
-Recover: failed or timed-out specialists are retried once with an adjusted prompt per the error-handling rule (PRD R8); persistent failures are recorded and the synthesis proceeds with available outputs rather than hanging.
+Recover: failed or timed-out specialists are retried once with an adjusted prompt per the error-handling rule (PRD R8); persistent failures are recorded and the synthesis proceeds with available outputs rather than hanging. Run scripts/dispatch.py PLAN.json (default retries each failed specialist once before recording status: failed).
 
 Synthesize: the Orchestrator merges specialist outputs into a single answer, noting dissent and confidence where specialists disagree. The synthesis contract and output schema are defined in references/synthesis.md.
 
