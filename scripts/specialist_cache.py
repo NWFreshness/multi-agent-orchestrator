@@ -39,6 +39,10 @@ KEY_RE = re.compile(r"^[0-9a-f]{64}$")
 
 DEFAULT_BASE_DIR = Path(".cache") / "orchestrator"
 
+# Per-call uniqueness counter for the mtime probe (GIL-atomic append;
+# best-effort uniqueness — worst case is the same D47-safe miss).
+_PROBE_SEQ: list = []
+
 
 def check_namespace(namespace: str) -> str:
     """Validate a cache namespace, returning it unchanged.
@@ -85,11 +89,19 @@ def _now_via_probe(base_dir: Path) -> Optional[float]:
     """Wall-clock ``now`` as a fresh file's mtime (no clock import).
 
     ``specialist_cache`` is limited to its locked stdlib set, so instead
-    of ``time.time()`` we touch a pid-suffixed probe file and read back
-    its mtime. Returns None when the probe cannot be created.
+    of ``time.time()`` we touch a per-call-unique probe file and read
+    back its mtime. Uniqueness comes from pid + id() of a live
+    per-call token + a GIL-atomic append counter, so concurrent
+    lookups in one namespace never share a probe path (a shared
+    pid-suffixed name raced on touch/stat/unlink across threads).
+    Returns None when the probe cannot be created.
     """
+    token = object()  # kept alive for the whole call: id() is unique
+    _PROBE_SEQ.append(token)
+    seq = len(_PROBE_SEQ)
     try:
-        probe = base_dir / (".probe-%d" % os.getpid())
+        probe = base_dir / (".probe-%d-%d-%d"
+                            % (os.getpid(), id(token), seq))
         probe.touch(exist_ok=True)
         now = probe.stat().st_mtime
         try:
