@@ -15,12 +15,13 @@
 
 ## Completion log (append-only — newest at bottom)
 
-- 2026-10-10 — Phase 2 entry: F2.1 + F2.2 specs merged as f94a4c6 via PR #11 (squash).
-  Spec PASS 13/13. Both specs are docs-only — F2.5 owns the actual `resolve_model`
-  Python implementation, F2.3 owns `--dry-run`, F2.4 owns JSON Schema
-  enforcement, F2.6 owns token estimates. F2.1 4-tier chain locked; F2.2
-  independence rule locked (3 cases worked, anti-coupling language). Phase 2
-  is now 2/6 features in flight (specs only, no code yet).
+- 2026-10-10 — 2.3 done: --dry-run plan preview merged as 49104f3 via PR #12 (squash).
+  Spec v1 FAIL on two cosmetic issues (tautological Validated line + duplicate
+  Batch 2 line). Controller applied polish in 9018ff3 (informative Validated
+  count; single-line batch layout with `(depends on <id>)` appended to the
+  dependent specialist). Phase 1 regressions 29/29 still green. F2.3 ships the
+  D26 thin `resolve_model` stub (env + default); F2.5 will replace the body with
+  the full 4-tier chain from F2.1. Next: F2.4 (output_schema content enforcement).
 
 ## Completion log (append-only — newest at bottom)
 
