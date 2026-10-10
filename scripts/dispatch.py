@@ -30,6 +30,7 @@ Usage:
         [--fail-mode {raise,continue,simulate:N}] [--self-test]
         [--tokens-per-char N]
         [--cache-namespace NAME] [--cache-ttl-hours H]
+        [--progress PATH]
 
 Exit codes: 0 = every specialist ended ``ok`` OR
 ``failed-with-retries-exhausted`` (continue/simulate path; raise also writes
@@ -765,6 +766,33 @@ def _harvest_with_retries(
             # logs/specialists/<id>.<n>.json.
 
 
+def _append_progress_records(
+    records: List[Dict[str, Any]],
+    progress_path: Optional[str],
+) -> None:
+    """F3.4: append one batch's harvest records to the progress sink.
+
+    Best-effort (D51): any IO failure → single ``WARNING: progress
+    sink ...`` to stderr, dispatch continues, exit code unaffected.
+    ``None`` touches nothing. Each line is the trace-record dict
+    verbatim via ``json.dumps(record, sort_keys=True)`` (D52); the file
+    is opened in append mode and closed per batch so a ``tail -f``
+    consumer sees flushed lines, with parent dirs auto-created (D49).
+    """
+    if not progress_path:
+        return
+    try:
+        sink = Path(progress_path)
+        sink.parent.mkdir(parents=True, exist_ok=True)
+        with open(sink, "a", encoding="utf-8") as handle:
+            for record in records:
+                handle.write(json.dumps(record, sort_keys=True))
+                handle.write("\n")
+    except Exception as exc:  # noqa: BLE001 - D51: sink IO never fails a run
+        print("WARNING: progress sink %s: %s" % (progress_path, exc),
+              file=sys.stderr)
+
+
 def dispatch_plan(
     plan: Dict[str, Any],
     max_parallel: int,
@@ -784,6 +812,7 @@ def dispatch_plan(
     tokens_per_char: float = 0.25,
     cache_namespace: str = "",
     cache_ttl_hours: float = 24.0,
+    progress_path: Optional[str] = None,
 ) -> Tuple[int, List[Dict[str, Any]]]:
     """Run all batches honoring retry policy. Returns (exit_code, trace_records).
 
@@ -820,6 +849,15 @@ def dispatch_plan(
     disabled) and ``cache_ttl_hours`` (default 24.0) thread down to
     ``_run_one`` for the lookup-before-run / store-after-success
     paths (same threading shape as F2.6 ``tokens_per_char``).
+
+    F3.4 keyword-only kwarg: ``progress_path`` (default None =
+    disabled) streams each batch's harvest records to the local
+    append-only JSONL sink via ``_append_progress_records`` (same
+    threading shape as F2.6 / F3.3). Appends happen per batch INSIDE
+    the loop — before the cancel check and before the token/schema
+    passes — so ``fail_mode=raise`` still streams completed batches
+    and the sink carries harvest-form records (D52). Best-effort
+    (D51); ``--dry-run`` never touches the sink.
     """
     specialists = plan.get("specialists", [])
     batches = plan.get("batches", [])
@@ -867,6 +905,12 @@ def dispatch_plan(
             cache_namespace=cache_namespace,
             cache_ttl_hours=cache_ttl_hours)
         trace.extend(records)
+        # F3.4: stream this batch's harvest records to the progress
+        # sink (open-append-close per batch) BEFORE the cancel check
+        # so fail_mode=raise still streams completed batches, and
+        # BEFORE the token/schema passes so the sink carries
+        # harvest-form records (D52). Best-effort — never raises (D51).
+        _append_progress_records(records, progress_path)
         failed_count += sum(1 for r in records if r["status"] != "ok")
         if cancel:
             cancel_remaining = True
@@ -1053,6 +1097,15 @@ def run_self_test(scripts_dir: Path) -> bool:
         ``cached is True`` and the output file bytes == planted bytes.
       - cache-MISS: fresh namespace → normal run, no ``cached`` flag,
         and the cache entry file is created for the key.
+
+    F3.4 cases (additive, total 17→19):
+      - STREAM: 2-batch plan + temp sink → sink line count == trace
+        record count, every line parses as JSON with
+        ``id``/``batch``/``status``, batch-0 lines precede batch-1
+        lines.
+      - SILENT: no progress flag → no file created at the would-be
+        path. Temp sinks live under ``/tmp`` and are removed in
+        ``finally`` (never a repo-relative default).
     """
     failures = 0
 
@@ -1612,7 +1665,104 @@ def run_self_test(scripts_dir: Path) -> bool:
             print("SELF_TEST PASS: cache MISS "
                   "(normal run, entry stored for the key)")
 
-    total = 17
+    # ---- F3.4 streaming progress sink (additive, total 17→19) ----
+    # Fixture STREAM: 2-batch plan + temp sink → sink line count ==
+    # trace record count, every line parses as JSON with
+    # id/batch/status, batch-0 lines precede batch-1 lines.
+    stream_sink = Path("/tmp") / ("_f34_progress_%d.jsonl" % os.getpid())
+    try:
+        if stream_sink.is_file():
+            stream_sink.unlink()
+        plan_stream = {"task_summary": "stream",
+                       "specialists": [_spec_factory("r1", "researcher"),
+                                       _spec_factory("cr", "critic"),
+                                       _spec_factory("wr", "writer")],
+                       "batches": [[0, 1], [2]],
+                       "dependencies": {"wr": ["r1"]}}
+        _wipe_logs()
+        SPECIALIST_LOG_DIR.mkdir(parents=True, exist_ok=True)
+        stream_exit, stream_trace = dispatch_plan(
+            plan_stream, max_parallel=4, fail_mode="continue",
+            simulate_n=0, scripts_dir=scripts_dir,
+            specialists_dir=SPECIALIST_LOG_DIR,
+            max_retries=0, retry_strategy="continue",
+            retry_test_overrides=None,
+            progress_path=str(stream_sink))
+        try:
+            stream_lines = [json.loads(l) for l in
+                            stream_sink.read_text().splitlines()
+                            if l.strip()]
+        except (OSError, json.JSONDecodeError) as exc:
+            stream_lines = []
+            failures += 1
+            print("SELF_TEST FAIL: progress STREAM sink read: %s" % exc)
+        else:
+            stream_batches = [l.get("batch") for l in stream_lines]
+            if stream_exit != 0:
+                failures += 1
+                print("SELF_TEST FAIL: progress STREAM exit "
+                      "(expected 0, got %d)" % stream_exit)
+            elif len(stream_lines) != len(stream_trace):
+                failures += 1
+                print("SELF_TEST FAIL: progress STREAM line count "
+                      "(expected %d, got %d)"
+                      % (len(stream_trace), len(stream_lines)))
+            elif any(not isinstance(l, dict) or "id" not in l
+                     or "batch" not in l or "status" not in l
+                     for l in stream_lines):
+                failures += 1
+                print("SELF_TEST FAIL: progress STREAM lines must carry "
+                      "id/batch/status")
+            elif stream_batches != sorted(stream_batches):
+                failures += 1
+                print("SELF_TEST FAIL: progress STREAM batch-0 lines must "
+                      "precede batch-1 lines (got %s)" % (stream_batches,))
+            else:
+                print("SELF_TEST PASS: progress STREAM "
+                      "(%d lines, batches in order)" % len(stream_lines))
+    finally:
+        if stream_sink.is_file():
+            stream_sink.unlink()
+        _wipe_logs()
+
+    # Fixture SILENT: no progress flag → no file created at the
+    # would-be path.
+    silent_sink = Path("/tmp") / ("_f34_progress_silent_%d.jsonl"
+                                  % os.getpid())
+    try:
+        if silent_sink.is_file():
+            silent_sink.unlink()
+        plan_silent = {"task_summary": "silent",
+                       "specialists": [_spec_factory("r1", "researcher"),
+                                       _spec_factory("cr", "critic"),
+                                       _spec_factory("wr", "writer")],
+                       "batches": [[0, 1], [2]],
+                       "dependencies": {"wr": ["r1"]}}
+        _wipe_logs()
+        SPECIALIST_LOG_DIR.mkdir(parents=True, exist_ok=True)
+        silent_exit, _silent_trace = dispatch_plan(
+            plan_silent, max_parallel=4, fail_mode="continue",
+            simulate_n=0, scripts_dir=scripts_dir,
+            specialists_dir=SPECIALIST_LOG_DIR,
+            max_retries=0, retry_strategy="continue",
+            retry_test_overrides=None)
+        if silent_exit != 0:
+            failures += 1
+            print("SELF_TEST FAIL: progress SILENT exit "
+                  "(expected 0, got %d)" % silent_exit)
+        elif silent_sink.exists():
+            failures += 1
+            print("SELF_TEST FAIL: progress SILENT created a sink file "
+                  "without the flag")
+        else:
+            print("SELF_TEST PASS: progress SILENT "
+                  "(no flag → no sink file)")
+    finally:
+        if silent_sink.is_file():
+            silent_sink.unlink()
+        _wipe_logs()
+
+    total = 19
     print("SELF_TEST: %d/%d passed" % (total - failures, total))
     return failures == 0
 
@@ -1688,6 +1838,14 @@ def main(argv: Optional[List[str]] = None) -> int:
                         help="F3.3: cache entry TTL in hours (default 24.0). "
                              "Entries older than this are re-run + re-stored. "
                              "<= 0 means entries never expire. "
+                             "Order-independent with the other flags.")
+    parser.add_argument("--progress", default=None,
+                        help="F3.4: streaming progress sink — append one JSON "
+                             "line per completed specialist record per batch "
+                             "to PATH (local append-only JSONL, parents "
+                             "auto-created; default None = disabled). "
+                             "Best-effort: IO failures warn only, never fail "
+                             "the run. Never touched by --dry-run. "
                              "Order-independent with the other flags.")
     parser.add_argument("--self-test", action="store_true",
                         help="Run built-in end-to-end fixture")
@@ -1815,7 +1973,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         schema_check=not args.no_schema_check,
         tokens_per_char=args.tokens_per_char,
         cache_namespace=args.cache_namespace,
-        cache_ttl_hours=args.cache_ttl_hours)
+        cache_ttl_hours=args.cache_ttl_hours,
+        progress_path=args.progress)
     return exit_code
 
 

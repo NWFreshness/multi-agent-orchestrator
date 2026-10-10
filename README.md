@@ -32,7 +32,8 @@ Phase 1 MVP shipped: 10/10 features done. See `docs/specs/INDEX.md` for status a
 | F2.6    | Per-call token estimate surfaced in log | Done   |
 | F3.1    | Persistent specialist pools (named experts) | Done |
 | F3.2    | Custom archetypes (`~/.hermes/agents/*.yaml`) | Done |
-| F3.3    | Specialist output cache (TTL + namespaces) | In progress |
+| F3.3    | Specialist output cache (TTL + namespaces) | Done |
+| F3.4    | Streaming progress to a file sink | In progress |
 
 > **Note (F1.9):** the `/orchestrate` slash command is registered in the local
 > Hermes checkout (`~/.hermes/hermes-agent`, branch
