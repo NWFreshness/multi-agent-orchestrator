@@ -20,9 +20,10 @@ Phase 1 — foundation: **In progress**. Per-feature status lives in `docs/specs
 | F1.2    | Orchestrator spawn contract + plan    | Done        |
 | F1.3    | Static archetype catalog (Appendix A) | Done        |
 | F1.4    | Plan parsing + validation             | Done        |
-| F1.5    | Batch dispatch (no real LLM)         | In progress |
-| F1.6    | Synthesis contract & output schema   | In progress |
-| F1.7    | Error recovery (retry-once + gaps)   | In progress |
+| F1.5    | Batch dispatch (no real LLM)         | Done        |
+| F1.6    | Synthesis contract & output schema   | Done        |
+| F1.7    | Error recovery (retry-once + gaps)   | Done        |
+| F1.8    | Orchestration log writer (PRD R9)    | Done        |
 
 ## Layout
 

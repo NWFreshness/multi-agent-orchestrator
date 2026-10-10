@@ -48,7 +48,7 @@ Each batch is dispatched as a `delegate_task` call carrying an array of speciali
 
 ## 6. Observability
 
-Every run produces a human-readable log at `<workspace>/orchestration-log-<timestamp>.md` (PRD R9). It records each specialist's role, prompt, status, elapsed time, and token/cost estimate, plus the final synthesized answer. Errors are emitted as actionable messages, not stack traces. The exact log format is defined in `references/orchestration-log.md` (F1.8).
+Every run produces a human-readable log at `<workspace>/orchestration-log-<timestamp>.md` (PRD R9). It records each specialist's role, prompt, status, elapsed time, and token/cost estimate, plus the final synthesized answer. Errors are emitted as actionable messages, not stack traces. The exact log format is defined in `references/orchestration-log.md` (F1.8). Run scripts/write_log.py (default paths) to produce the per-Run orchestration log at orchestration-log-<UTC-timestamp>.md.
 
 ## 7. Safety
 
