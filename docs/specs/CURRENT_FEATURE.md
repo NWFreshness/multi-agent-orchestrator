@@ -2,17 +2,16 @@
 
 ## In progress
 
-### 1.8 — Orchestration log writer (`scripts/write_log.py`)
+### 1.9 — `/orchestrate` slash command registration
 
-- Spec: `docs/specs/phase-1/1.8-orchestration-log.md`
-- Branch: `feat/1.8-orchestration-log` (implementer creates from `main`)
+- Spec: `docs/specs/phase-1/1.9-slash-command.md`
+- Branch: `feat/1.9-slash-command` (implementer creates from `main`)
 - Status: implementer dispatch pending
-- Gate: stdlib-only CLI that reads `logs/orchestration-trace.jsonl`
-  (F1.5/F1.7 format) + writes `<workspace>/orchestration-log-<timestamp>.md`
-  per PRD R9 (role, prompt, status, elapsed, token/cost estimate, synthesized
-  answer placeholder); F1.6 synthesis output slot left for F1.10; spec
-  pointers in SKILL.md §6; controller checks green; two-stage review passed;
-  squash-merged via PR.
+- Gate: Hermes slash command `orchestrate` registered per `hermes-agent`
+  skill §"Adding a Slash Command" (3 files: `hermes_cli/commands.py`,
+  `cli.py`, optional `gateway/run.py`); accepts `<task>` arg; documented in
+  `hermes skills inspect` output; controller checks green; two-stage review
+  passed; squash-merged via PR.
 
 ## Completion log (append-only — newest at bottom)
 
@@ -57,5 +56,11 @@
  Spec PASS 9/9; quality APPROVED after controller-applied spec-body polish
  ca9567f (`retries: <N+1>` → `retries: <N>`, body now matches formal def).
  The `retry_test_overrides` private kwarg is the right call: env var needs
- stub change (excluded), argv sentinel pollutes argparse, plan key / per-spec
+ the stub change (excluded), argv sentinel pollutes argparse, plan key / per-spec
  field fail F1.4 E1 strict validation. 4/4 quality re-review PASS.
+ - 2026-10-10 — 1.8 done: orchestration log writer merged as cbd1039 via PR #8 (squash).
+ Spec PASS 12/12 (incl. 5 adversarial probes); quality REQUEST_CHANGES for
+ README drift (F1.5–F1.8 rows still said "In progress"); controller applied
+ all 4 flips in a single amend. No behavior changes. No M1/M2 fixes (cosmetic,
+ out of PR scope). Phase 1 is now 8/10 — only the slash command (1.9) and
+ the test suite (1.10) remain before MVP ships.
