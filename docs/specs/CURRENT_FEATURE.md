@@ -2,15 +2,15 @@
 
 ## In progress
 
-### 1.3 — Static archetype catalog (`references/archetypes.md`)
+### 1.4 — Plan parsing + validation (`scripts/validate_plan.py`)
 
-- Spec: `docs/specs/phase-1/1.3-archetype-catalog.md`
-- Branch: `feat/1.3-archetype-catalog` (implementer creates from `main`)
+- Spec: `docs/specs/phase-1/1.4-plan-parse-validate.md`
+- Branch: `feat/1.4-plan-parse-validate` (implementer creates from `main`)
 - Status: implementer dispatch pending
-- Gate: `references/archetypes.md` with all 13 core + 5 optional archetypes
-  (purpose + default tools per PRD Appendix A) + shape contract (7 fields +
-  batches + dependencies); no SKILL.md diff; controller checks green; two-stage
-  review passed; squash-merged via PR.
+- Gate: stdlib-only CLI validator (exit 0/1/2 contract); enforces E1–E8
+  (shape, count 3–15, 7 fields, batches cover-exactly-once, dep ids/cycles/order,
+  reviewer-required, nesting guard); `--self-test` green; SKILL.md pointer clause
+  only; controller checks green; two-stage review passed; squash-merged via PR.
 
 ## Completion log (append-only — newest at bottom)
 
@@ -22,3 +22,8 @@
   Spec PASS + quality APPROVED after one fix cycle (1 Critical + 2 Important + 4 Minor,
   all fixed in ccc2274; controller one-token pre-fix missed the §3 twin — quality caught it).
   Lesson persisted to subagent-driven-development skill (grep twins on reviewer-dictated fixes).
+- 2026-10-10 — 1.3 done: archetype catalog merged as 43264df via PR #3 (squash).
+  Spec PASS + quality APPROVED (2 non-blocking minors applied in-branch 1be2afe +
+  README drift fix). Toolchain note: host python has no pytest (→ 1.4 ships
+  --self-test; 1.10 decides unittest-vs-pytest); jsonschema present but D7 locks
+  stdlib-only for skill scripts.
