@@ -26,6 +26,12 @@ import subprocess
 import sys
 
 
+# Generous bound: the per-script self-tests are deterministic and finish
+# in well under a second on real hardware. 60s prevents a hang from
+# blocking the driver forever.
+PER_SCRIPT_TIMEOUT_SEC = 60.0
+
+
 # Locked by F1.10 spec §"Hard-coded expectations" + D19. DO NOT reorder
 # or recompute; the order + counts are the contract.
 SUITES = (
@@ -48,11 +54,18 @@ def _run_one(script_name: str, expected: int):
     pattern = f"{expected}/{expected} passed"
 
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        proc = subprocess.run(cmd, capture_output=True, text=True,
+                              timeout=PER_SCRIPT_TIMEOUT_SEC)
     except FileNotFoundError as e:
         # Missing interpreter or script — surface as IO.
         print(f"{script_name}: IO error launching self-test: {e}", file=sys.stderr)
         return False, "", str(e)
+    except subprocess.TimeoutExpired:
+        # Per-script self-test hung past the safety bound. Treat as red
+        # and surface the timeout to the user.
+        msg = f"timeout after {PER_SCRIPT_TIMEOUT_SEC:.0f}s"
+        print(f"{script_name}: {msg}", file=sys.stderr)
+        return False, "", msg
 
     captured = (proc.stdout or "") + (proc.stderr or "")
     if pattern in captured:
@@ -111,9 +124,14 @@ def run_self_test():
     cmd = [sys.executable, f"{SCRIPTS_DIR}/{script}", "--self-test"]
 
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        proc = subprocess.run(cmd, capture_output=True, text=True,
+                              timeout=PER_SCRIPT_TIMEOUT_SEC)
     except FileNotFoundError as e:
         print(f"run_tests --self-test: IO error: {e}", file=sys.stderr)
+        return 2
+    except subprocess.TimeoutExpired:
+        print(f"run_tests --self-test: timeout after {PER_SCRIPT_TIMEOUT_SEC:.0f}s",
+              file=sys.stderr)
         return 2
 
     captured = (proc.stdout or "") + (proc.stderr or "")
