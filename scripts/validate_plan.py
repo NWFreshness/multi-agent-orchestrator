@@ -60,7 +60,8 @@ def _find_cycle(dependencies: Dict[str, Any], idset: set) -> List[str]:
         vals = dependencies.get(node, [])
         if not isinstance(vals, list):
             return []
-        return sorted([p for p in vals if p in idset and p != node])
+        return sorted([p for p in vals
+                       if isinstance(p, str) and p in idset and p != node])
 
     for root in sorted(idset):
         if color[root] != WHITE:
@@ -240,8 +241,12 @@ def validate(plan: Any) -> Tuple[List[str], List[str]]:
             if not isinstance(prereqs, list):
                 errors.append("%s: must be a list of specialist ids" % kpath)
                 continue
-            for pre in prereqs:
-                if pre not in idset:
+            for j, pre in enumerate(prereqs):
+                if not isinstance(pre, str):
+                    errors.append(
+                        "dependencies.%s[%d]: prerequisite must be a specialist "
+                        "id string, got %s" % (key, j, type(pre).__name__))
+                elif pre not in idset:
                     errors.append("%s: unknown prerequisite id %r" % (kpath, pre))
                 elif pre == key:
                     errors.append("%s: self-dependency on %r" % (kpath, pre))
@@ -254,6 +259,8 @@ def validate(plan: Any) -> Tuple[List[str], List[str]]:
                 if not isinstance(prereqs, list):
                     continue
                 for pre in prereqs:
+                    if (not isinstance(pre, str) or not isinstance(key, str)):
+                        continue
                     if key in idpos and pre in idpos and not idpos[key] > idpos[pre]:
                         errors.append(
                             "dependencies.%s: batch position %d not strictly after "
@@ -357,6 +364,14 @@ def _self_test_cases() -> List[Tuple[str, Dict[str, Any], bool]]:
         plan["specialists"][0]["specialists"] = [{"id": "deep"}]
     mod("nested-specialists", set_nested)
 
+    def set_listprereq(plan: Dict[str, Any]) -> None:
+        plan["dependencies"] = {"wr": [["r1"]]}
+    mod("unhashable-list-prereq", set_listprereq)
+
+    def set_dictprereq(plan: Dict[str, Any]) -> None:
+        plan["dependencies"] = {"wr": [{"id": "r1"}]}
+    mod("unhashable-dict-prereq", set_dictprereq)
+
     return cases
 
 
@@ -371,6 +386,9 @@ def run_self_test() -> bool:
             extra_ok = False
         if name == "cycle" and not any("->" in e for e in errors):
             extra_ok = False
+        if name in ("unhashable-list-prereq", "unhashable-dict-prereq"):
+            if not any("dependencies.wr[0]" in e for e in errors):
+                extra_ok = False
         if valid == expect_valid and extra_ok:
             print("SELF_TEST PASS: %s" % name)
         else:
