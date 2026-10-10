@@ -38,17 +38,19 @@ PER_SCRIPT_TIMEOUT_SEC = 60.0
 # 4-tier chain + cost-estimate preview line; dispatch gained the
 # cost-budget + option-tier resolution fixtures) + F2.6 (dispatch
 # gained 2 token-estimate fixtures; write_log gained the F2.6
-# rendering fixture). DO NOT reorder or recompute; the order +
-# counts are the contract.
+# rendering fixture) + F3.2 (discover_archetypes gained the 5-fixture
+# dir-chain + malformed-skip + defaults self-test). DO NOT reorder or
+# recompute; the order + counts are the contract.
 SUITES = (
     ("validate_plan.py", 16),
     ("dispatch.py",       15),
     ("write_log.py",      8),
+    ("discover_archetypes.py", 5),
 )
 
 SCRIPTS_DIR = "scripts"
 
-EXPECTED_TOTAL = sum(n for _, n in SUITES)  # 39
+EXPECTED_TOTAL = sum(n for _, n in SUITES)  # 44
 
 
 def _run_one(script_name: str, expected: int):
