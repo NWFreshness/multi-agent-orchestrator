@@ -62,3 +62,4 @@ No privilege escalation: specialists receive reduced toolsets appropriate to the
 - `references/pools.md` — persistent specialist pool contract + `pools/` examples (defined in F3.1).
 - `references/custom-archetypes.md` — user-defined archetype discovery (`~/.hermes/agents/*.yaml`; defined in F3.2).
 - `references/cache.md` — specialist output cache: content-hash key, `--cache-namespace` / `--cache-ttl-hours` flags, `cached: true` stamp (defined in F3.3).
+- `references/streaming.md` — streaming progress sink: `--progress PATH` JSONL contract, consumer recipe, never-blocks rule (defined in F3.4).
