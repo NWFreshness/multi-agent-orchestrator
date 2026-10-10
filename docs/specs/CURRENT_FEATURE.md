@@ -2,16 +2,16 @@
 
 ## In progress
 
-### 3.2 — Custom archetypes via `~/.hermes/agents/*.yaml`
+### 3.3 — Cache layer (in-session + named namespaces)
 
-- Spec: `docs/specs/phase-3/3.2-custom-archetypes.md` (drafted, in-progress)
-- Branch: `feat/3.2-custom-archetypes`
+- Spec: `docs/specs/phase-3/3.3-specialist-cache.md` (to be drafted)
+- Branch: `feat/3.3-specialist-cache`
 - Status: implementer dispatch pending
-- Gate: `scripts/discover_archetypes.py` (stdlib-only, flat-YAML subset,
-  5 self-tests) + `references/custom-archetypes.md` contract (D41 dir
-  chain, D42 flat shape, D43 skip-with-warning, D44 validator untouched).
-  run_tests 39→44. Two-stage review + controller green; squash-merged
-  via PR.
+- Gate: `scripts/specialist_cache.py` (5 self-tests) + dispatcher
+  `--cache-namespace` / `--cache-ttl-hours` with `cached: true` stamps
+  (D45 content-hash key, D46 `.cache/orchestrator/<ns>/`, D47
+  never-breaks-a-run, D48 hits still schema-checked). run_tests 44→51.
+  Two-stage review + controller green; squash-merged via PR.
 
 ## Completion log (append-only — newest at bottom)
 
@@ -31,6 +31,10 @@
   pretty-print + 2 prose nits; 2 README padding nits declined —
   pre-existing table width variance). D38–D40 verified. run_tests 39/39.
   Next: F3.2 (custom archetypes).
+- 2026-10-10 — 3.2 done: custom archetype discovery merged as 45aa9d6 via PR #17 (squash).
+  Spec PASS 10/10 + 5/5 adversarial; `--json` accepted as harmless
+  additive. Quality APPROVED + controller-applied docstring nit.
+  D41–D44 verified. run_tests 44/44. Next: F3.3 (cache layer).
 
 ## Completion log (append-only — newest at bottom)
 
