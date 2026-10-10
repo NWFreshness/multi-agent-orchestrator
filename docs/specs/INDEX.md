@@ -33,11 +33,20 @@ Parallelization notes: only ONE feature in-progress at a time (see
 CURRENT_FEATURE.md) — this project paces "slow and controlled", so the table's
 parallel options are intentionally unused until the user says otherwise.
 
-## Phase 2 — Model selection & overrides (specs unwritten; author after Phase 1 ships)
+## Phase 2 — Model selection & overrides (specs drafting; F2.1 + F2.2 docs-only)
 
-F2.1 model resolution (options → env → config → defaults) · F2.2 independent
-overrides · F2.3 `--dry-run` · F2.4 `output_schema` enforcement · F2.5 budget
-abort · F2.6 token estimates.
+| Feature | Spec | Status | Depends on | Blocks | Lands as |
+| ------- | ---- | ------ | ---------- | ------ | -------- |
+| 2.1 | [phase-2/2.1-model-resolution.md](phase-2/2.1-model-resolution.md) — 4-tier resolution chain (options > env → config → default) + `resolve_model()` helper contract | in_progress | nothing | 2.3, 2.5 | PR #11 (this branch) |
+| 2.2 | [phase-2/2.2-independent-model-overrides.md](phase-2/2.2-independent-model-overrides.md) — D21: Orchestrator ⊥ subagent overrides (extends `references/model-resolution.md`) | in_progress | nothing | 2.3, 2.5 | PR #11 (this branch) |
+| 2.3 | (unwritten) — `--dry-run` plan preview; imports `resolve_model` from F2.1 | pending | 2.1, 2.2 | 2.4 | TBD |
+| 2.4 | (unwritten) — `output_schema` enforcement | pending | nothing | nothing | TBD |
+| 2.5 | (unwritten) — cost-budget abort with warning; ships the `resolve_model()` import | pending | 2.1, 2.2 | nothing | TBD |
+| 2.6 | (unwritten) — per-call token estimate surfaced in log | pending | nothing | nothing | TBD |
+
+Critical path: 2.1 + 2.2 → 2.3 → (2.5 in parallel with 2.3). F2.1 and F2.2 are
+both docs-only and share the same `references/model-resolution.md`; the
+implementer of either must read the other's spec before editing.
 
 ## Phase 3 — Advanced (specs unwritten)
 
