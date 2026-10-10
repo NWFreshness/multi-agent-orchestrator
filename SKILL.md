@@ -32,7 +32,7 @@ Spawn Orchestrator: otherwise the parent spawns exactly one Orchestrator subagen
 
 Plan: the Orchestrator analyzes the task and returns a JSON plan — chosen roles, per-role goal, per-role context, dependency edges, and batch grouping (PRD R3).
 
-Validate: the parent validates the plan before any dispatch — 3–15 specialists, `max_spawn_depth = 2`, well-formed `output_schema` per specialist; invalid plans are rejected with a clear error, never dispatched.
+Validate: the parent validates the plan before any dispatch — 3–15 specialists, `max_spawn_depth = 2`, well-formed `output_schema` per specialist. Invalid plans are rejected with a clear error and never dispatched. Run scripts/validate_plan.py (exit 0 = dispatchable) to gate the dispatch.
 
 Batch dispatch: the Orchestrator issues `delegate_task` calls, one array of specialists per batch, respecting dependency edges; independent specialists run in parallel.
 

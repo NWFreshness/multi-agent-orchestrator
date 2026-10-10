@@ -18,7 +18,8 @@ Phase 1 — foundation: **In progress**. Per-feature status lives in `docs/specs
 | ------- | ------------------------------------- | ----------- |
 | F1.1    | Skill scaffold (SKILL.md + layout)    | Done        |
 | F1.2    | Orchestrator spawn contract + plan    | Done        |
-| F1.3    | Static archetype catalog (Appendix A) | In progress |
+| F1.3    | Static archetype catalog (Appendix A) | Done        |
+| F1.4    | Plan parsing + validation             | In progress |
 
 ## Layout
 
