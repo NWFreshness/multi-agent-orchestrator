@@ -2,18 +2,16 @@
 
 ## In progress
 
-### 1.7 — Error recovery (retry-once, gap flagging) in `scripts/dispatch.py`
+### 1.8 — Orchestration log writer (`scripts/write_log.py`)
 
-- Spec: `docs/specs/phase-1/1.7-error-recovery.md`
-- Branch: `feat/1.7-error-recovery` (implementer creates from `main`)
+- Spec: `docs/specs/phase-1/1.8-orchestration-log.md`
+- Branch: `feat/1.8-orchestration-log` (implementer creates from `main`)
 - Status: implementer dispatch pending
-- Gate: extends `scripts/dispatch.py` with `--max-retries 1` (default 1) and
-  `--retry-strategy {restart,continue}`; retry on `failed` specialists
-  (status from F1.5 trace) is one additional `subprocess.run` with the same
-  argv; `--self-test` covers retry-once, retry-exhausted-still-failed, and
-  the no-retry-double-dispatch case; F1.6 contract integration: every
-  `failed_specialists` MUST surface in `gaps` (delegated to F1.8 log writer
-  if needed); existing F1.5 self-test still 4/4; two-stage review passed;
+- Gate: stdlib-only CLI that reads `logs/orchestration-trace.jsonl`
+  (F1.5/F1.7 format) + writes `<workspace>/orchestration-log-<timestamp>.md`
+  per PRD R9 (role, prompt, status, elapsed, token/cost estimate, synthesized
+  answer placeholder); F1.6 synthesis output slot left for F1.10; spec
+  pointers in SKILL.md §6; controller checks green; two-stage review passed;
   squash-merged via PR.
 
 ## Completion log (append-only — newest at bottom)
@@ -54,4 +52,10 @@
   Spec PASS; quality APPROVED after one polish commit (2be298f moved a
   conflated "high|medium|low" annotation out of a json fence into a markdown
   table). Both worked examples parse as real JSON; D11/D12 contracts preserved.
-  5/5 quality re-review PASS.
+ 5/5 quality re-review PASS.
+ - 2026-10-10 — 1.7 done: dispatcher retry-once merged as fd3ac2e via PR #7 (squash).
+ Spec PASS 9/9; quality APPROVED after controller-applied spec-body polish
+ ca9567f (`retries: <N+1>` → `retries: <N>`, body now matches formal def).
+ The `retry_test_overrides` private kwarg is the right call: env var needs
+ stub change (excluded), argv sentinel pollutes argparse, plan key / per-spec
+ field fail F1.4 E1 strict validation. 4/4 quality re-review PASS.
