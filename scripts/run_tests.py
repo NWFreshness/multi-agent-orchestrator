@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Phase 1 test driver — runs every existing per-script ``--self-test`` and
+"""Skill test driver — runs every existing per-script ``--self-test`` and
 reports one combined pass/fail so the user has a single command to verify
-the whole Phase 1 surface.
+the whole script surface.
 
 Stdlib-only. Per-spec:
-  * Locked order: validate_plan.py, dispatch.py, write_log.py.
-  * Locked expected counts: 15, 7, 7 (hard-coded — the driver is a
+  * Locked order: validate_plan.py, dispatch.py, write_log.py,
+    discover_archetypes.py, specialist_cache.py.
+  * Locked expected counts: 16, 19, 8, 5, 5 (hard-coded — the driver is a
     tripwire, not a discovery mechanism).
   * Match strategy: grep per-script stdout for the exact pattern
     ``<N>/<N> passed``. If the pattern is missing, that suite is red
@@ -14,7 +15,7 @@ Stdlib-only. Per-spec:
     classified as red.
 
 CLI:
-  python3 scripts/run_tests.py            # run all three; exit 0/1
+  python3 scripts/run_tests.py            # run all five; exit 0/1
   python3 scripts/run_tests.py --self-test # run validate_plan only
                                           # (smoke check the driver)
 
