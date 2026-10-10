@@ -793,6 +793,59 @@ def _append_progress_records(
               file=sys.stderr)
 
 
+def _spawn_background(argv: List[str]) -> int:
+    """F3.5 (D53): re-exec self detached and return 0.
+
+    Rebuilds the child argv as ``[sys.executable, <abspath dispatch.py>]
+    + forwarded flags`` — everything except ALL exact ``--background``
+    tokens (stripped; ``--self-test`` never reaches here per D54).
+    Launches via ``subprocess.Popen(..., start_new_session=True,
+    stdout=log_f, stderr=subprocess.STDOUT)`` with
+    ``log_f = open(logs/background-<UTC-ts>.log, 'wb')`` (parent dirs
+    created) and ``cwd=os.getcwd()`` so relative ``logs/`` + ``.cache/``
+    resolve identically. Prints
+    ``background: pid=<n> log=<log path> trace=<trace path>`` to stdout
+    and returns 0. The parent closes its handle immediately (the child
+    holds its own fd — no hang on parent exit). POSIX-only detach
+    (``start_new_session``); no Windows ``creationflags`` branch.
+    """
+    forwarded = [a for a in argv if a != "--background"]
+    dispatch_abs = str(Path(__file__).resolve())
+    child_argv = [sys.executable, dispatch_abs] + forwarded
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    log_path = Path("logs") / ("background-%s.log" % ts)
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        print("error: cannot create %s: %s" % (log_path.parent, exc),
+              file=sys.stderr)
+        return 2
+    try:
+        log_f = open(log_path, "wb")
+    except OSError as exc:
+        print("error: cannot write %s: %s" % (log_path, exc),
+              file=sys.stderr)
+        return 2
+    try:
+        proc = subprocess.Popen(
+            child_argv, start_new_session=True, cwd=os.getcwd(),
+            stdout=log_f, stderr=subprocess.STDOUT)
+    except OSError as exc:
+        try:
+            log_f.close()
+        except OSError:
+            pass
+        print("error: background spawn failed: %s" % exc, file=sys.stderr)
+        return 2
+    try:
+        log_f.close()
+    except OSError:
+        pass
+    print("background: pid=%d log=%s trace=%s"
+          % (proc.pid, log_path, ORCHESTRATION_TRACE))
+    return 0
+
+
 def dispatch_plan(
     plan: Dict[str, Any],
     max_parallel: int,
@@ -1106,6 +1159,14 @@ def run_self_test(scripts_dir: Path) -> bool:
       - SILENT: no progress flag → no file created at the would-be
         path. Temp sinks live under ``/tmp`` and are removed in
         ``finally`` (never a repo-relative default).
+
+    F3.5 cases (additive, total 19→21):
+      - BG: spawn a real detached child via ``_spawn_background`` with
+        a ``--progress`` sink, poll the sink to a 30s ``datetime``
+        deadline, reap with ``os.waitpid``, assert exit 0 + sink lines
+        parse + trace holds real specialist records.
+      - BG_EXCLUSIVE: ``main([plan, --background, --dry-run])`` → 2;
+        ``main([--self-test, --background])`` → 2.
     """
     failures = 0
 
@@ -1762,7 +1823,195 @@ def run_self_test(scripts_dir: Path) -> bool:
             silent_sink.unlink()
         _wipe_logs()
 
-    total = 19
+    # ---- F3.5 async background run mode (additive, total 19→21) ----
+    # Fixture BG: spawn a real detached child via _spawn_background
+    # with a --progress sink, poll the sink to a 30s datetime deadline,
+    # reap with os.waitpid, assert exit 0 + sink lines parse + trace
+    # holds real specialist records (tripwire against --self-test
+    # recursion — D54's exclusivity plus stripping makes it
+    # unreachable, but the trace ids prove the child ran a real
+    # dispatch). Every spawned child is reaped in-test — no zombies,
+    # no leaked children.
+    bg_plan = _self_test_plan()
+    bg_plan["task_summary"] = "background"
+    bg_plan_path = Path("/tmp") / ("_f35_bg_%d.json" % os.getpid())
+    bg_sink = Path("/tmp") / ("_f35_bg_sink_%d.jsonl" % os.getpid())
+    try:
+        if bg_sink.is_file():
+            bg_sink.unlink()
+        with open(bg_plan_path, "w", encoding="utf-8") as _h:
+            json.dump(bg_plan, _h)
+        _wipe_logs()
+        bg_argv = [str(bg_plan_path), "--background",
+                   "--progress", str(bg_sink)]
+
+        class _BgCap(list):
+            def write(self, s: str) -> int:
+                self.append(s)
+                return len(s)
+
+        cap_b = _BgCap()
+        _saved_out = sys.stdout
+        sys.stdout = cap_b  # type: ignore[assignment]
+        try:
+            bg_spawn_ret = _spawn_background(bg_argv)
+        finally:
+            sys.stdout = _saved_out
+        bg_text = "".join(cap_b)
+        bg_pid = -1
+        bg_log = ""
+        for _tok in bg_text.strip().split():
+            if _tok.startswith("pid="):
+                try:
+                    bg_pid = int(_tok[len("pid="):])
+                except ValueError:
+                    bg_pid = -1
+            elif _tok.startswith("log="):
+                bg_log = _tok[len("log="):]
+        if bg_spawn_ret != 0:
+            failures += 1
+            print("SELF_TEST FAIL: background BG spawn exit "
+                  "(expected 0, got %d)" % bg_spawn_ret)
+            bg_pid = -1
+        elif bg_pid <= 0:
+            failures += 1
+            print("SELF_TEST FAIL: background BG handle line unparseable "
+                  "(got %r)" % bg_text.strip())
+            bg_pid = -1
+        else:
+            _time_mod = __import__("time")
+            _start = datetime.now(timezone.utc)
+            _sink_ready = False
+            while ((datetime.now(timezone.utc) - _start)
+                   .total_seconds() < 30):
+                try:
+                    _lines = [l for l in bg_sink.read_text().splitlines()
+                              if l.strip()]
+                except OSError:
+                    _lines = []
+                if len(_lines) >= 3:
+                    _sink_ready = True
+                    break
+                _time_mod.sleep(0.2)
+            _status = 0
+            _exited = False
+            try:
+                if not _sink_ready:
+                    try:
+                        os.kill(bg_pid, 9)
+                    except OSError:
+                        pass
+                _wpid, _status = os.waitpid(bg_pid, 0)
+                _exited = (os.WIFEXITED(_status)
+                           and os.WEXITSTATUS(_status) == 0)
+            except (OSError, ChildProcessError) as exc:
+                failures += 1
+                print("SELF_TEST FAIL: background BG waitpid: %s" % exc)
+                _exited = False
+                _sink_ready = False
+            if not _sink_ready:
+                failures += 1
+                print("SELF_TEST FAIL: background BG sink timeout "
+                      "(<3 lines in 30s)")
+            elif not _exited:
+                failures += 1
+                print("SELF_TEST FAIL: background BG child exit "
+                      "(expected 0, got status %r)" % (_status,))
+            else:
+                try:
+                    _sink_recs = [json.loads(l) for l in
+                                  bg_sink.read_text().splitlines()
+                                  if l.strip()]
+                except (OSError, json.JSONDecodeError) as exc:
+                    _sink_recs = []
+                    failures += 1
+                    print("SELF_TEST FAIL: background BG sink parse: %s"
+                          % exc)
+                else:
+                    if any(not isinstance(r, dict) or "id" not in r
+                           or "batch" not in r or "status" not in r
+                           for r in _sink_recs):
+                        failures += 1
+                        print("SELF_TEST FAIL: background BG sink lines "
+                              "must carry id/batch/status")
+                    else:
+                        try:
+                            _trace_recs = [json.loads(l) for l in
+                                           ORCHESTRATION_TRACE.read_text()
+                                           .splitlines() if l.strip()]
+                        except (OSError, json.JSONDecodeError) as exc:
+                            _trace_recs = []
+                            failures += 1
+                            print("SELF_TEST FAIL: background BG trace "
+                                  "read: %s" % exc)
+                        else:
+                            _ids = {r.get("id") for r in _trace_recs
+                                    if isinstance(r, dict)}
+                            if _ids != {"r1", "wr", "cr"}:
+                                failures += 1
+                                print("SELF_TEST FAIL: background BG trace "
+                                      "ids (expected {'r1','wr','cr'}, got "
+                                      "%s)" % (_ids,))
+                            elif (not bg_log
+                                  or not Path(bg_log).is_file()):
+                                failures += 1
+                                print("SELF_TEST FAIL: background BG log "
+                                      "file missing (log=%r)" % (bg_log,))
+                            else:
+                                print("SELF_TEST PASS: background BG "
+                                      "(detached child exit 0, sink + "
+                                      "trace + log present)")
+    finally:
+        try:
+            if bg_plan_path.is_file():
+                bg_plan_path.unlink()
+        except OSError:
+            pass
+        try:
+            if bg_sink.is_file():
+                bg_sink.unlink()
+        except OSError:
+            pass
+        _wipe_logs()
+
+    # Fixture BG_EXCLUSIVE: --background is mutually exclusive with
+    # --dry-run and --self-test (D54 — exit 2 + error:, never silently
+    # ignored).
+    excl_plan = _self_test_plan()
+    excl_plan["task_summary"] = "background-exclusive"
+    excl_path = Path("/tmp") / ("_f35_excl_%d.json" % os.getpid())
+    try:
+        with open(excl_path, "w", encoding="utf-8") as _h:
+            json.dump(excl_plan, _h)
+        _wipe_logs()
+        excl_dry = main([str(excl_path), "--background", "--dry-run"])
+        excl_dry_logs = Path("logs").is_dir()
+        _wipe_logs()
+        excl_self = main(["--self-test", "--background"])
+        if excl_dry != 2:
+            failures += 1
+            print("SELF_TEST FAIL: background EXCLUSIVE --dry-run exit "
+                  "(expected 2, got %d)" % excl_dry)
+        elif excl_dry_logs:
+            failures += 1
+            print("SELF_TEST FAIL: background EXCLUSIVE --dry-run created "
+                  "logs/ (should NOT)")
+        elif excl_self != 2:
+            failures += 1
+            print("SELF_TEST FAIL: background EXCLUSIVE --self-test exit "
+                  "(expected 2, got %d)" % excl_self)
+        else:
+            print("SELF_TEST PASS: background EXCLUSIVE (--background + "
+                  "--dry-run/--self-test → exit 2)")
+    finally:
+        try:
+            if excl_path.is_file():
+                excl_path.unlink()
+        except OSError:
+            pass
+        _wipe_logs()
+
+    total = 21
     print("SELF_TEST: %d/%d passed" % (total - failures, total))
     return failures == 0
 
@@ -1847,9 +2096,28 @@ def main(argv: Optional[List[str]] = None) -> int:
                              "Best-effort: IO failures warn only, never fail "
                              "the run. Never touched by --dry-run. "
                              "Order-independent with the other flags.")
+    parser.add_argument("--background", action="store_true", default=False,
+                        help="F3.5: detach — re-exec self detached "
+                             "(POSIX-only start_new_session, stdio to "
+                             "logs/background-<UTC-ts>.log), print "
+                             "'background: pid=<n> log=<path> trace=<path>' "
+                             "and exit 0. Only a dispatchable plan detaches "
+                             "(validation + cost check run first in the "
+                             "foreground). Mutually exclusive with --dry-run "
+                             "and --self-test. Pair with --progress for "
+                             "polling. Order-independent with the other "
+                             "flags.")
     parser.add_argument("--self-test", action="store_true",
                         help="Run built-in end-to-end fixture")
     args = parser.parse_args(argv)
+
+    # F3.5 D54: --background is mutually exclusive with --self-test —
+    # reject explicitly (exit 2 + error:) rather than silently ignoring.
+    # The self-test branch runs first, so this check precedes it.
+    if args.self_test and args.background:
+        print("error: --background cannot be combined with --self-test",
+              file=sys.stderr)
+        return 2
 
     if args.self_test:
         scripts_dir = Path(__file__).resolve().parent
@@ -1879,6 +2147,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.tokens_per_char < 0:
         print("error: --tokens-per-char must be >= 0 (got %r)"
               % args.tokens_per_char, file=sys.stderr)
+        return 2
+    # F3.5 D54: --background is mutually exclusive with --dry-run —
+    # backgrounding a no-dispatch preview is meaningless (exit 2 +
+    # error:, never silently ignored). Checked with the other flag
+    # validation so no plan load, no detach, no logs/ either way.
+    if args.background and args.dry_run:
+        print("error: --background cannot be combined with --dry-run",
+              file=sys.stderr)
         return 2
     # F3.3: invalid namespace is a usage error (F1.5 contract) — error:
     # + exit 2 before any plan load or dispatch. The cache module is
@@ -1960,6 +2236,15 @@ def main(argv: Optional[List[str]] = None) -> int:
             cost_per_call=args.cost_per_call,
             max_cost=args.max_cost)
         return 0
+
+    # F3.5 (D53): detach AFTER validation + cost-budget check + dry-run
+    # handling, BEFORE dispatch — an invalid/over-budget plan fails in
+    # the FOREGROUND (fast, visible errors); only a dispatchable plan
+    # detaches. The child is a normal foreground dispatch (one code
+    # path); the parent prints the handle line and exits 0.
+    if args.background:
+        raw = argv if argv is not None else sys.argv[1:]
+        return _spawn_background(list(raw))
 
     scripts_dir = Path(__file__).resolve().parent
     specialists_dir = SPECIALIST_LOG_DIR
