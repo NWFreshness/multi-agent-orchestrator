@@ -37,7 +37,7 @@ Field names are locked. The Orchestrator must return exactly this shape:
      "model": "opencode-go/deepseek-v4.1-flash"}
   ],
   "batches": [[0, 1], [2]],
-  "dependencies": {"2": ["r1"]}
+  "dependencies": {"wr": ["r1"]}
 }
 ```
 
