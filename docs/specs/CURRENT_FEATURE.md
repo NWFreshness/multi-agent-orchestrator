@@ -2,13 +2,15 @@
 
 ## In progress
 
-### (none — Phase 2 MVP shipped via PR #15; awaiting Phase 3 spec or Phase 2 polish)
+### 3.1 — Persistent specialist pools (named experts)
 
-- Status: implementer dispatch pending for Phase 3 OR Phase 2 polish. Both
-  repos are green: validate_plan 16/16, validate_schema 22/22, write_log
-  8/8, plan_preview 13/13, dispatch 15/15, run_tests 39/39, F1.x untouched.
-  Recommend pausing here for a human review of the full Phase 1+2 tree
-  before drafting Phase 3.
+- Spec: `docs/specs/phase-3/3.1-specialist-pools.md` (drafted, in-progress)
+- Branch: `feat/3.1-specialist-pools`
+- Status: implementer dispatch pending
+- Gate: contract-only per F1.3/F2.1 precedent — `references/pools.md` +
+  `pools/research-trio.json` (D38 repo-local, D39 F1.2 7-field members,
+  D40 advisory + concrete, zero `scripts/` changes). Two-stage review +
+  controller green; squash-merged via PR.
 
 ## Completion log (append-only — newest at bottom)
 

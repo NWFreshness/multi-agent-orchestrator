@@ -48,10 +48,20 @@ Critical path: 2.1 + 2.2 → 2.3 → (2.5 in parallel with 2.3). F2.1 and F2.2 a
 both docs-only and share the same `references/model-resolution.md`; the
 implementer of either must read the other's spec before editing.
 
-## Phase 3 — Advanced (specs unwritten)
+## Phase 3 — Advanced
 
-F3.1 specialist pools · F3.2 custom archetypes · F3.3 cache · F3.4 streaming ·
-F3.5 background mode.
+Phase acceptance (PRD §9 + §10): pools reusable across sessions;
+custom archetypes discoverable; cache hit path; streaming progress;
+background run mode. Features are independent surfaces — build in
+listed order.
+
+| Feature | Spec | Status | Depends on | Blocks | Lands as |
+| ------- | ---- | ------ | ---------- | ------ | -------- |
+| 3.1 | [phase-3/3.1-specialist-pools.md](phase-3/3.1-specialist-pools.md) — Persistent specialist pools contract + example (`references/pools.md`, `pools/research-trio.json`; advisory, no script changes) | in-progress | nothing | nothing | TBD |
+| 3.2 | (unwritten) — Custom archetypes via `~/.hermes/agents/*.yaml` | planned | nothing | nothing | TBD |
+| 3.3 | (unwritten) — Cache layer (in-session + named namespaces) | planned | nothing | nothing | TBD |
+| 3.4 | (unwritten) — Streaming progress to external channels | planned | nothing | nothing | TBD |
+| 3.5 | (unwritten) — Async / background orchestration run mode | planned | nothing | nothing | TBD |
 
 ## Conventions
 
