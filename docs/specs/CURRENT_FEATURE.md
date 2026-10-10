@@ -2,16 +2,19 @@
 
 ## In progress
 
-### 1.10 — Test suite (`scripts/run_tests.py` driver)
+### (none — Phase 1 MVP shipped via PR #10; awaiting Phase 2 spec)
 
-- Spec: `docs/specs/phase-1/1.10-tests.md`
-- Branch: `feat/1.10-tests` (implementer creates from `main`)
-- Status: implementer dispatch pending
-- Gate: stdlib-only `scripts/run_tests.py` that invokes each existing
-  per-script `--self-test` in order (validate_plan 15, dispatch 7,
-  write_log 7), aggregates results, exits 0 only if every suite passes;
-  README updated; F1.9 restart note already in place; controller checks
-  green; two-stage review passed; squash-merged via PR. Phase 1 done.
+- Status: implementer dispatch pending for Phase 2 (model selection & overrides)
+
+## Completion log (append-only — newest at bottom)
+
+- 2026-10-10 — 1.10 done: test driver merged as e9b6ff3 via PR #10 (squash). Spec
+  PASS; quality flagged no-timeout (real gap) and exit-2-on-missing-script (a
+  spec wording inconsistency, not a defect). Controller applied the timeout
+  fix in cb88634 (60s, TimeoutExpired → red, surfaced to stderr) and shipped.
+  Per-script --self-tests 15/7/7; run_tests.py → 29/29 green. **Phase 1 MVP
+  shipped.** Final tree: 10 PRs, 10 features, 1 open carry-forward (F1.6
+  synthesis output schema content — quality minor 3, deferred to Phase 2).
 
 ## Completion log (append-only — newest at bottom)
 

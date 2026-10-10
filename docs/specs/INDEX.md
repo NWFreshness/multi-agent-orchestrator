@@ -23,7 +23,7 @@ answer with ≥2 specialist outputs visible in the orchestration log.
 | 1.7 | [phase-1/1.7-error-recovery.md](phase-1/1.7-error-recovery.md) — Error recovery (`scripts/dispatch.py` retry-once + gap flagging per F1.6) | done | 1.5, 1.6 | 1.9 | PR #7 (merged fd3ac2e) |
 | 1.8 | [phase-1/1.8-orchestration-log.md](phase-1/1.8-orchestration-log.md) — Orchestration log writer (`scripts/write_log.py`, stdlib-only, markdown output per PRD R9) | done | 1.5, 1.6 | 1.9 | PR #8 (merged cbd1039) |
 | 1.9 | [phase-1/1.9-slash-command.md](phase-1/1.9-slash-command.md) — `/orchestrate` slash command registration (Hermes `commands.py` + `cli.py`) | done | 1.1–1.8 | 1.10 | PR #9 (merged 903a233) |
-| 1.10 | [phase-1/1.10-tests.md](phase-1/1.10-tests.md) — Test driver (`scripts/run_tests.py`, stdlib-only, runs each --self-test and aggregates) | in-progress | 1.1–1.9 | nothing | PR `feat/1.10-tests` |
+| 1.10 | [phase-1/1.10-tests.md](phase-1/1.10-tests.md) — Test driver (`scripts/run_tests.py`, stdlib-only, runs each --self-test and aggregates) | done | 1.1–1.9 | nothing | PR #10 (merged e9b6ff3) |
 
 Critical path: 1.1 → 1.2 → 1.4 → 1.5 → 1.6 → 1.9 → 1.10. The long pole is the
 1.4→1.5→1.6 chain (plan contract → dispatch → synthesis); 1.3 and 1.7/1.8 can
