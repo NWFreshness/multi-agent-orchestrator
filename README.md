@@ -6,13 +6,17 @@ See [`docs/prd/multi-agent-orchestrator.md`](./docs/prd/multi-agent-orchestrator
 
 ## Status
 
-Phase 1 — foundation: **PRD only**. Skill implementation has not started.
+Phase 1 — foundation: **In progress**. F1.1 (skill scaffold) is underway; PRD is complete.
 
-| Phase | Scope                                            | Status     |
-| ----- | ------------------------------------------------ | ---------- |
-| 1     | MVP, fixed models (Kimi K3 / DeepSeek V4.1 Flash) | Not started |
+| Phase | Scope                                            | Status      |
+| ----- | ------------------------------------------------ | ----------- |
+| 1     | MVP, fixed models (Kimi K3 / DeepSeek V4.1 Flash) | In progress |
 | 2     | Model selection & overrides                      | Not started |
 | 3     | Advanced (specialist pools, custom archetypes)   | Not started |
+
+| Feature | Scope                              | Status      |
+| ------- | ---------------------------------- | ----------- |
+| F1.1    | Skill scaffold (SKILL.md + layout) | In progress |
 
 ## Layout
 
