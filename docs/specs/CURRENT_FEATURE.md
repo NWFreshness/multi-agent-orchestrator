@@ -2,29 +2,22 @@
 
 ## In progress
 
-### 3.1 — Persistent specialist pools (named experts)
+### 3.2 — Custom archetypes via `~/.hermes/agents/*.yaml`
 
-- Spec: `docs/specs/phase-3/3.1-specialist-pools.md` (drafted, in-progress)
-- Branch: `feat/3.1-specialist-pools`
+- Spec: `docs/specs/phase-3/3.2-custom-archetypes.md` (to be drafted)
+- Branch: `feat/3.2-custom-archetypes`
 - Status: implementer dispatch pending
-- Gate: contract-only per F1.3/F2.1 precedent — `references/pools.md` +
-  `pools/research-trio.json` (D38 repo-local, D39 F1.2 7-field members,
-  D40 advisory + concrete, zero `scripts/` changes). Two-stage review +
+- Gate: skill discovers user-defined archetype YAMLs alongside the F1.3
+  static catalog and offers them in plan output. Two-stage review +
   controller green; squash-merged via PR.
 
 ## Completion log (append-only — newest at bottom)
 
-- 2026-10-10 — 2.6 done: per-call token estimate merged as fbcc855 via PR #15 (squash).
-  Spec PASS, all 5 adversarial probes (a–e). D35–D37 verified. Token-stamp
-  pass runs unconditionally so --no-schema-check still gets the field.
-  **Phase 2 MVP shipped.** 15 PRs total across Phase 1 (10) + Phase 2 (5);
-  full test surface green: validate_plan 16/16, validate_schema 22/22,
-  write_log 8/8, plan_preview 13/13, dispatch 15/15, run_tests 39/39.
-  Open carry-forwards into Phase 3: (a) F1.6 synthesis output_schema content
-  (quality minor 3 from PR #1); (b) the F2.6 token approximation is a stub
-  waiting for real provider estimates; (c) the F1.9 /orchestrate slash
-  command lives on a local Hermes feature branch, not pushed upstream
-  (user approval needed).
+- 2026-10-10 — 3.1 done: pools contract + example merged as e55c731 via PR #16 (squash).
+  Spec PASS; quality REQUEST_CHANGES → controller-applied (JSON
+  pretty-print + 2 prose nits; 2 README padding nits declined —
+  pre-existing table width variance). D38–D40 verified. run_tests 39/39.
+  Next: F3.2 (custom archetypes).
 
 ## Completion log (append-only — newest at bottom)
 
