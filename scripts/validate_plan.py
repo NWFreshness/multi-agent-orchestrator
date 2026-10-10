@@ -13,7 +13,13 @@ Exit codes: 0 = dispatchable, 1 = invalid plan, 2 = usage/file error.
 import argparse
 import json
 import sys
+from pathlib import Path
 from typing import Any, Dict, List, Tuple
+
+# F2.4: E3 sub-rule for output_schema content (locked JSON Schema subset).
+# The check_plan_schemas helper is imported LAZILY inside ``_schema_errors``
+# so this module's top-level imports stay stdlib-only (controller AST
+# check rejects any project-local import at module top level).
 
 # Human source of truth for this catalog: references/archetypes.md
 # (D8: hardcoded here on purpose — never markdown-parse prose at runtime;
@@ -58,6 +64,31 @@ MAX_NESTING_DEPTH = 64
 
 def _role_known(role: str) -> bool:
     return role in KNOWN_ROLES or role.startswith(DOMAIN_EXPERT_PREFIX)
+
+
+def _schema_errors(plan: Any) -> List[str]:
+    """F2.4 E3 sub-rule: invoke ``check_plan_schemas`` on the plan.
+
+    The project-local import is wrapped in try/except so this module
+    stays importable in isolation if ``validate_schema.py`` ever goes
+    missing in a future rollback; on failure, the sub-rule silently
+    no-ops (the F1.4 existing E3 checks still catch the obvious
+    shape errors). The E8 nesting walk (MAX_NESTING_DEPTH) is
+    already applied to every specialist subtree by ``_check_nesting``,
+    so the same 64-depth cap covers deeply nested output_schema
+    bodies — no new check needed here.
+    """
+    try:
+        # Add the scripts/ directory to sys.path so the validate_schema
+        # module resolves whether this script is invoked from the repo
+        # root, by absolute path, or by ``python3 -m``.
+        scripts_dir = str(Path(__file__).resolve().parent)
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        import validate_schema as _vs  # type: ignore[import-not-found]
+    except Exception:  # noqa: BLE001
+        return []
+    return _vs.check_plan_schemas(plan)
 
 
 def _is_reviewer(role: Any) -> bool:
@@ -347,6 +378,15 @@ def validate(plan: Any) -> Tuple[List[str], List[str]]:
     for top_key, top_val in plan.items():
         _check_nesting(top_val, top_key, errors)
 
+    # F2.4 E3 sub-rule: each specialist's output_schema must be (a) a
+    # non-empty JSON Schema object AND (b) every key must be in the
+    # locked subset (see ``scripts/validate_schema.py`` ``SUPPORTED_KEYWORDS``).
+    # E8 sub-rule: nested schemas inside an output_schema already count
+    # toward the 64-depth cap because ``_check_nesting`` walks every
+    # top-level subtree — so deeply nested output_schema bodies (a
+    # possible LLM-generated path) are bounded by the same fence.
+    errors.extend(_schema_errors(plan))
+
     return (errors, warnings)
 
 
@@ -437,6 +477,19 @@ def _self_test_cases() -> List[Tuple[str, Dict[str, Any], bool]]:
         plan["dependencies"] = {"wr": [{"id": "r1"}]}
     mod("unhashable-dict-prereq", set_dictprereq)
 
+    # F2.4: output_schema with a key outside the locked subset must be
+    # flagged as an E3 sub-rule error. ``prefixItems`` is the canonical
+    # "looks JSON-Schema-ish but isn't in D29" keyword (D29 froze the
+    # subset at 17 keys). The existing "non-object-output_schema" fixture
+    # covers the dict-shape check; this one covers the well-formed-but-
+    # unsupported-keyword path.
+    def set_unsupported_schema_kw(plan: Dict[str, Any]) -> None:
+        plan["specialists"][0]["output_schema"] = {
+            "type": "array",
+            "prefixItems": [{"type": "string"}],
+        }
+    mod("output_schema-unsupported-keyword", set_unsupported_schema_kw)
+
     return cases
 
 
@@ -453,6 +506,15 @@ def run_self_test() -> bool:
             extra_ok = False
         if name in ("unhashable-list-prereq", "unhashable-dict-prereq"):
             if not any("dependencies.wr[0]" in e for e in errors):
+                extra_ok = False
+        # F2.4: the new E3 sub-rule fixture must surface the locked-
+        # subset message (unsupported-keyword). The existing shape error
+        # for ``non-object-output_schema`` is reported separately by
+        # the F1.4 path; this one covers the well-formed-but-
+        # unsupported-keyword path.
+        if name == "output_schema-unsupported-keyword":
+            if not any("prefixItems" in e and "locked subset" in e
+                       for e in errors):
                 extra_ok = False
         if valid == expect_valid and extra_ok:
             print("SELF_TEST PASS: %s" % name)

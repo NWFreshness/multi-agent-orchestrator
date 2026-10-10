@@ -26,7 +26,8 @@ Phase 1 MVP shipped: 10/10 features done. See `docs/specs/INDEX.md` for status a
 | F1.8    | Orchestration log writer (PRD R9)        | Done   |
 | F1.9    | /orchestrate slash command registration | Done   |
 | F1.10   | Test driver (`scripts/run_tests.py`)    | Done   |
-| F2.3    | `--dry-run` plan preview                 | In progress |
+| F2.3    | `--dry-run` plan preview                 | Done   |
+| F2.4    | `output_schema` content enforcement     | Done   |
 
 > **Note (F1.9):** the `/orchestrate` slash command is registered in the local
 > Hermes checkout (`~/.hermes/hermes-agent`, branch
