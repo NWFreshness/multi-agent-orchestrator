@@ -13,6 +13,17 @@
 
 ## Completion log (append-only — newest at bottom)
 
+- 2026-10-10 — 2.6 done: per-call token estimate merged as fbcc855 via PR #15 (squash).
+  Spec PASS, all 5 adversarial probes (a–e). D35–D37 verified. Token-stamp
+  pass runs unconditionally so --no-schema-check still gets the field.
+  **Phase 2 MVP shipped.** 15 PRs total across Phase 1 (10) + Phase 2 (5);
+  full test surface green: validate_plan 16/16, validate_schema 22/22,
+  write_log 8/8, plan_preview 13/13, dispatch 15/15, run_tests 39/39.
+  Open carry-forwards into Phase 3: (a) F1.6 synthesis output_schema content
+  (quality minor 3 from PR #1); (b) the F2.6 token approximation is a stub
+  waiting for real provider estimates; (c) the F1.9 /orchestrate slash
+  command lives on a local Hermes feature branch, not pushed upstream
+  (user approval needed).
 - 2026-10-10 — 3.1 done: pools contract + example merged as e55c731 via PR #16 (squash).
   Spec PASS; quality REQUEST_CHANGES → controller-applied (JSON
   pretty-print + 2 prose nits; 2 README padding nits declined —
