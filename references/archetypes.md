@@ -57,7 +57,7 @@ Every chosen archetype gets, at minimum:
 - `output_schema` — the JSON schema the specialist's result must conform to
   (content defined in F1.6, not here).
 - `tools` — least-privilege subset of the parent session's tools granted to this
-  specialist (defaults in §§1–2 are the starting point; narrow further per task).
+  specialist (defaults in §1 are the starting point; §2 roles start from least privilege; narrow further per task).
 - `model` — specialist model; default `opencode-go/deepseek-v4.1-flash` in Phase 1.
 
 The Orchestrator's plan additionally carries:

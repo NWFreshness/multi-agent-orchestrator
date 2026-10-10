@@ -6,7 +6,7 @@ See [`docs/prd/multi-agent-orchestrator.md`](./docs/prd/multi-agent-orchestrator
 
 ## Status
 
-Phase 1 — foundation: **In progress**. F1.1 (skill scaffold) is underway; PRD is complete.
+Phase 1 — foundation: **In progress**. Per-feature status lives in `docs/specs/INDEX.md`; PRD is complete.
 
 | Phase | Scope                                            | Status      |
 | ----- | ------------------------------------------------ | ----------- |
@@ -14,10 +14,10 @@ Phase 1 — foundation: **In progress**. F1.1 (skill scaffold) is underway; PRD 
 | 2     | Model selection & overrides                      | Not started |
 | 3     | Advanced (specialist pools, custom archetypes)   | Not started |
 
-| Feature | Scope                              | Status      |
-| ------- | ---------------------------------- | ----------- |
-| F1.1    | Skill scaffold (SKILL.md + layout) | In progress |
-| F1.2    | Orchestrator spawn contract + plan | In progress |
+| Feature | Scope                                 | Status      |
+| ------- | ------------------------------------- | ----------- |
+| F1.1    | Skill scaffold (SKILL.md + layout)    | Done        |
+| F1.2    | Orchestrator spawn contract + plan    | Done        |
 | F1.3    | Static archetype catalog (Appendix A) | In progress |
 
 ## Layout
