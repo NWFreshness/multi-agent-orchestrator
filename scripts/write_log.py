@@ -137,6 +137,12 @@ def _format_attempt_row(attempt_index: int, rec: Dict[str, Any]) -> str:
         - Attempt 1: ok, elapsed=142ms, output=logs/specialists/r1.1.json, retries=0
     ``error`` is appended only when present; ``retries`` is the count of
     ADDITIONAL attempts AFTER the first one (F1.7 contract).
+
+    F2.6: when the trace record carries a ``token_estimate`` > 0, append
+    ``, tokens=<N>`` to the bullet. When ``token_estimate`` is 0 or
+    absent, the ``tokens=`` part is OMITTED — the writer never prints
+    ``tokens=0`` noise. Single-line format (markdown renderer handles
+    wrapping).
     """
     status = rec.get("status", "unknown")
     elapsed = rec.get("elapsed_ms", 0)
@@ -146,6 +152,11 @@ def _format_attempt_row(attempt_index: int, rec: Dict[str, Any]) -> str:
             % (attempt_index, status, elapsed, output_path, retries))
     if "error" in rec and rec["error"]:
         line += ", error=%s" % rec["error"]
+    # F2.6: token_estimate is observation; render only when > 0.
+    raw_tokens = rec.get("token_estimate")
+    if isinstance(raw_tokens, int) and not isinstance(raw_tokens, bool):
+        if raw_tokens > 0:
+            line += ", tokens=%d" % raw_tokens
     return line
 
 
@@ -185,13 +196,20 @@ def _format_plan_summary(records: List[Dict[str, Any]]) -> str:
 
 
 def _format_aggregate(records: List[Dict[str, Any]]) -> str:
-    """``## Aggregate`` — total elapsed, succeeded, failed, retried.
+    """``## Aggregate`` — total elapsed, succeeded, failed, retried, tokens.
 
     F1.8 spec: "total elapsed (sum of elapsed_ms across final-per-spec
     records)" — sum the elapsed_ms of each specialist's FINAL record
     (chronologically last). Succeeded / failed count unique specialists
     by final status. Retried counts unique specialists whose final
     ``retries`` field is > 0.
+
+    F2.6: adds ``- Total estimated tokens: N`` line, where N is the sum
+    of ``token_estimate`` across the same FINAL records. ``tokens`` is
+    ALWAYS rendered (even when N == 0) so users see the aggregate
+    presence regardless of whether any spec carried estimates. The
+    per-attempt row, by contrast, omits ``tokens=0`` to keep the
+    output clean (locked F2.6 contract).
     """
     final = _final_record_per_id(records)
     total_elapsed = sum(int(rec.get("elapsed_ms", 0))
@@ -202,11 +220,14 @@ def _format_aggregate(records: List[Dict[str, Any]]) -> str:
                  if rec.get("status") != "ok")
     retried = sum(1 for rec in final.values()
                   if int(rec.get("retries", 0)) > 0)
+    total_tokens = sum(int(rec.get("token_estimate", 0) or 0)
+                       for rec in final.values())
     lines = ["## Aggregate", "",
              "- Total elapsed: %dms" % total_elapsed,
              "- Succeeded: %d" % succeeded,
              "- Failed: %d" % failed,
              "- Retried: %d" % retried,
+             "- Total estimated tokens: %d" % total_tokens,
              ""]
     return "\n".join(lines)
 
@@ -304,29 +325,38 @@ def _write_log(
 def _self_test_fixture_trace(tmp_dir: Path) -> Path:
     """Write a deterministic fixture trace under ``tmp_dir``.
 
-    Two specialists: ``r1`` succeeds on the first try (1 record, 0 retries),
-    ``a2`` fails once then succeeds (2 records, retries: 0 then 1). The
-    fixture exercises both the "unique-in-order" rule and the multi-attempt
-    chronological rendering.
+    Two specialists: ``r1`` succeeds on the first try (1 record, 0 retries,
+    F2.6 ``token_estimate=42``), ``a2`` fails once then succeeds
+    (2 records, retries: 0 then 1; the FINAL record carries
+    ``token_estimate=180`` so the F2.6 rendering assertion can prove
+    the last-attempt estimate surfaces in the attempt row and the
+    aggregate aggregates the FINAL per-id values — the failed
+    intermediate attempt has no ``token_estimate`` so the bullet
+    must OMIT the ``tokens=`` part). The fixture exercises both the
+    "unique-in-order" rule and the multi-attempt chronological
+    rendering, plus the F2.6 per-attempt conditional rendering and
+    the ``Total estimated tokens: N`` aggregate line (42 + 180 = 222).
     """
     trace_path = tmp_dir / "orchestration-trace.jsonl"
     lines = [
-        # r1: success first try
+        # r1: success first try (F2.6 token_estimate=42 on the final).
         {"ts": "2026-10-09T20:15:00Z", "started_ts": "2026-10-09T20:14:59Z",
          "batch": 0, "id": "r1", "role": "researcher",
          "status": "ok", "output_path": "logs/specialists/r1.1.json",
-         "elapsed_ms": 142, "returncode": 0, "retries": 0},
-        # a2: first attempt fails
+         "elapsed_ms": 142, "returncode": 0, "retries": 0,
+         "token_estimate": 42},
+        # a2: first attempt fails (no token_estimate → bullet must omit).
         {"ts": "2026-10-09T20:15:01Z", "started_ts": "2026-10-09T20:15:00Z",
          "batch": 0, "id": "a2", "role": "critic",
          "status": "failed", "output_path": None,
          "elapsed_ms": 50, "returncode": 1, "retries": 0,
          "error": "transient timeout"},
-        # a2: second attempt succeeds
+        # a2: second (final) attempt succeeds (token_estimate=180).
         {"ts": "2026-10-09T20:15:03Z", "started_ts": "2026-10-09T20:15:02Z",
          "batch": 0, "id": "a2", "role": "critic",
          "status": "ok", "output_path": "logs/specialists/a2.2.json",
-         "elapsed_ms": 200, "returncode": 0, "retries": 1},
+         "elapsed_ms": 200, "returncode": 0, "retries": 1,
+         "token_estimate": 180},
     ]
     with open(trace_path, "w", encoding="utf-8") as handle:
         for line in lines:
@@ -379,7 +409,7 @@ def _self_test() -> bool:
         except OSError:
             pass
     if failures == 0:
-        print("SELF_TEST: 7/7 passed")
+        print("SELF_TEST: 8/8 passed")
     return failures == 0
 
 
@@ -488,6 +518,43 @@ def _run_self_test_assertions(tmp_dir: Path, failures_holder: List[int]) -> None
               % a2_attempts)
     else:
         print("SELF_TEST PASS: retry history shown (3 attempt rows)")
+
+    # ---- F2.6 token-estimate rendering (additive) ----
+    # Per-attempt row checks: r1's row carries tokens=42; a2's first
+    # (failed) row has NO tokens= part (no field); a2's second (final)
+    # row carries tokens=180. Aggregate line sums the FINAL records:
+    # r1 (42) + a2 final (180) = 222.
+    has_r1_tokens = ("tokens=42" in text)
+    has_a2_final_tokens = ("tokens=180" in text)
+    has_zero_noise = ("tokens=0" not in text)
+    has_aggregate_tokens = ("- Total estimated tokens: 222" in text)
+    # The failed a2 attempt (no token_estimate) must render WITHOUT a
+    # tokens= part. We assert that the row carrying the ``transient
+    # timeout`` error string contains no tokens= substring.
+    failed_line_idx = text.find("error=transient timeout")
+    failed_line_no_tokens = False
+    if failed_line_idx >= 0:
+        # Find the end of that bullet (next newline) and check the
+        # substring is tokens-free.
+        line_end = text.find("\n", failed_line_idx)
+        if line_end < 0:
+            line_end = len(text)
+        failed_line = text[failed_line_idx:line_end]
+        failed_line_no_tokens = ("tokens=" not in failed_line)
+    if (not has_r1_tokens or not has_a2_final_tokens
+            or not has_zero_noise or not has_aggregate_tokens
+            or not failed_line_no_tokens):
+        failures[0] += 1
+        print("SELF_TEST FAIL: F2.6 token rendering "
+              "(r1_has=%s, a2_final_has=%s, no_zero=%s, agg='%s', "
+              "failed_no_tokens=%s)"
+              % (has_r1_tokens, has_a2_final_tokens, has_zero_noise,
+                 has_aggregate_tokens, failed_line_no_tokens))
+    else:
+        print("SELF_TEST PASS: F2.6 token rendering "
+              "(tokens=42 on r1 row, tokens=180 on a2 final row, "
+              "no tokens= on a2 failed row, "
+              "Total estimated tokens: 222 aggregate)")
 
 
 def main(argv: Optional[List[str]] = None) -> int:

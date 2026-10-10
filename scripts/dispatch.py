@@ -28,6 +28,7 @@ Usage:
     python3 scripts/dispatch.py PLAN.json [--max-parallel N]
         [--max-retries N] [--retry-strategy {restart,continue}]
         [--fail-mode {raise,continue,simulate:N}] [--self-test]
+        [--tokens-per-char N]
 
 Exit codes: 0 = every specialist ended ``ok`` OR
 ``failed-with-retries-exhausted`` (continue/simulate path; raise also writes
@@ -37,6 +38,12 @@ also cancels remaining retries per F1.7), 2 = usage / IO error.
 
 D13/D14 LOCKED: ``--max-retries 1``, ``--retry-strategy continue``. Set
 ``--max-retries 0`` to recover F1.5 byte-for-byte behavior (no retry at all).
+
+F2.6 LOCKED: ``--tokens-per-char 0.25`` default. Per-specialist
+``token_estimate`` is computed by the dispatcher from the stub's
+``task`` + ``context`` field lengths and stamped onto every final
+trace record (independent of schema-check pass/fail). Set ``--tokens-per-char 0``
+to disable (the field is still present and 0).
 """
 
 import argparse
@@ -194,10 +201,105 @@ def _read_specialist_output(output_path: str) -> Tuple[Optional[Dict[str, Any]],
     return (data, None)
 
 
+def _compute_token_estimate(body: Optional[Dict[str, Any]],
+                            tokens_per_char: float) -> int:
+    """F2.6: token estimate from the stub's task + context string lengths.
+
+    D36 default is ``tokens_per_char = 0.25`` (≈ 4 chars per token, the
+    standard English approximation — inverse of the spec's ``// 4`` form).
+    D37: cast to int after the product; when ``tokens_per_char > 0`` and
+    either string has length > 0, the minimum is 1 (even a tiny prompt
+    is at least one token). When ``tokens_per_char == 0`` the field is
+    0 (effectively disabled — the trace still carries the field so
+    downstream readers can rely on its existence). Negative or zero
+    inputs are floored to 0; the ``int(...)`` cast naturally floors.
+
+    The stub body shape is the F1.5 echo: ``{"task": ..., "context": ...,
+    ...}``. If either key is missing or non-string (malformed stub),
+    treat as empty string — don't crash, just yield 0 (with the
+    min-1 floor guarded by ``any_text``).
+    """
+    if tokens_per_char <= 0:
+        return 0
+    if not isinstance(body, dict):
+        return 0
+    task = body.get("task", "")
+    context = body.get("context", "")
+    if not isinstance(task, str):
+        task = ""
+    if not isinstance(context, str):
+        context = ""
+    any_text = (len(task) > 0) or (len(context) > 0)
+    total_chars = len(task) + len(context)
+    raw = int(total_chars * tokens_per_char)
+    if raw < 1 and any_text:
+        return 1
+    if raw < 0:
+        return 0
+    return raw
+
+
+def _apply_token_estimates(
+    trace: List[Dict[str, Any]],
+    tokens_per_char: float,
+) -> List[Dict[str, Any]]:
+    """F2.6: stamp ``token_estimate`` on every final trace record.
+
+    Runs after harvest but independently of ``_apply_schema_check`` so
+    that ``--no-schema-check`` still gets token-estimate stamps. Walks
+    the trace, finds the final record per ``(batch, id)``, and for each
+    record that has an existing output_path reads the stub JSON once
+    via ``_read_specialist_output``, then calls
+    ``_compute_token_estimate(body, tokens_per_char)`` and stamps the
+    result. The ``tokens_per_char == 0`` case yields 0 for every record
+    (disabled — the field is still present, see D37 / spec §"Locked
+    behavior").
+
+    Mutates each final record in place by adding / overwriting
+    ``token_estimate: int``. Idempotent — running twice yields the same
+    values.
+    """
+    # Last trace line per (batch, id) — same rule as
+    # ``_final_records_by_id``.
+    final_indices: Dict[Tuple[int, str], int] = {}
+    for i, r in enumerate(trace):
+        key = (r.get("batch", -1), r.get("id", ""))
+        if key not in final_indices:
+            final_indices[key] = i
+        else:
+            ts_old = trace[final_indices[key]].get("ts", "")
+            ts_new = r.get("ts", "")
+            if ts_new >= ts_old:
+                final_indices[key] = i
+    # Read body once per record. We avoid the cache for clarity (the
+    # stub JSON file is tiny and we're not on a hot path). When
+    # tokens_per_char == 0 we still want the field stamped as 0, so we
+    # don't short-circuit on that — _compute_token_estimate already
+    # returns 0 in that case without reading the file. So when the
+    # conversion factor is 0, skip the file read entirely (saves I/O on
+    # the disabled path).
+    if tokens_per_char <= 0:
+        for (b, sid), idx in final_indices.items():
+            trace[idx]["token_estimate"] = 0
+        return trace
+    for (b, sid), idx in final_indices.items():
+        record = trace[idx]
+        output_path = record.get("output_path")
+        if not output_path:
+            # No output file to measure — no estimate possible.
+            record["token_estimate"] = 0
+            continue
+        body, _err = _read_specialist_output(output_path)
+        record["token_estimate"] = _compute_token_estimate(
+            body, tokens_per_char)
+    return trace
+
+
 def _apply_schema_check(
     trace: List[Dict[str, Any]],
     specialists: List[Dict[str, Any]],
     validate_fn,
+    tokens_per_char: float = 0.25,
 ) -> List[Dict[str, Any]]:
     """F2.4 post-dispatch per-specialist schema check (D30).
 
@@ -217,7 +319,10 @@ def _apply_schema_check(
 
     Other trace records (retry attempts) are left untouched — D30
     specifies the check is on the FINAL output per specialist. Per
-    D30, a failed check does NOT cancel the rest of the trace.
+    D30, a failed check does NOT cancel the rest of the trace. The
+    F2.6 token estimate is stamped by ``_apply_token_estimates`` in a
+    separate, always-on pass (so ``--no-schema-check`` still gets the
+    token field).
     """
     schema_by_id = {spec.get("id"): spec.get("output_schema")
                     for spec in specialists if isinstance(spec, dict)}
@@ -265,6 +370,10 @@ def _apply_schema_check(
             record["status"] = "failed"
             record["error"] = "output_schema mismatch: %s" % (
                 mismatch or "validation error")
+    # ``tokens_per_char`` is accepted for forward-compat with the
+    # F2.4->F2.6 call sites; F2.6's own stamp lives in
+    # ``_apply_token_estimates``.
+    _ = tokens_per_char
     return trace
 
 
@@ -574,6 +683,7 @@ def dispatch_plan(
     subagent: Optional[str] = None,
     max_cost: float = 0.0,
     cost_per_call: float = 0.01,
+    tokens_per_char: float = 0.25,
 ) -> Tuple[int, List[Dict[str, Any]]]:
     """Run all batches honoring retry policy. Returns (exit_code, trace_records).
 
@@ -599,6 +709,12 @@ def dispatch_plan(
     in ``main()`` before this function is called (no logs/ created on
     over-budget). These parameters do not change the behavior of this
     function today; they're a forward-compatible seam.
+
+    F2.6 keyword-only kwarg: ``tokens_per_char`` (default 0.25) feeds
+    the per-specialist token-estimate stamp applied to each final
+    trace record via ``_apply_token_estimates`` (independent of
+    ``schema_check``). When 0, the stamp is 0 on every record
+    (disabled). See D36 / D37.
     """
     specialists = plan.get("specialists", [])
     batches = plan.get("batches", [])
@@ -659,6 +775,13 @@ def dispatch_plan(
     print("dispatch: %d specialists, %d batches, %d failed, %d retried"
           % (n_final_records, len(batches), failed_count, n_retried))
 
+    # F2.6: stamp ``token_estimate`` on every final record — runs
+    # unconditionally so ``--no-schema-check`` still gets the field.
+    # Observation only; does NOT change exit codes or status. The
+    # schema check below may then flip status to ``failed`` on a
+    # mismatch, but the token estimate stays stamped.
+    _apply_token_estimates(trace, tokens_per_char)
+
     # F2.4 post-dispatch schema check (D30). Runs AFTER retries are
     # exhausted but BEFORE the trace is written. Lazily imports the
     # project-local validator so this module's top-level imports stay
@@ -677,7 +800,8 @@ def dispatch_plan(
             print("error: cannot run schema check (validate_schema "
                   "import failed: %s)" % exc, file=sys.stderr)
             return (2, trace)
-        trace = _apply_schema_check(trace, specialists, validate_fn)
+        trace = _apply_schema_check(trace, specialists, validate_fn,
+                                    tokens_per_char)
         # Re-derive failed_count so the post-check tally is accurate.
         failed_count = sum(1 for r in trace
                            if r.get("status") != "ok"
@@ -1156,7 +1280,104 @@ def run_self_test(scripts_dir: Path) -> bool:
         cost_over_path.unlink()
     _wipe_logs()
 
-    total = 13
+    # ---- F2.6 per-call token estimate (additive) ----
+    # Two fixtures proving the dispatcher stamps ``token_estimate`` on the
+    # final trace record from the stub's ``task`` + ``context`` lengths.
+    # Both fixtures use a 3-spec plan (the F1.4 validator requires 3-15
+    # specialists and at least one reviewer-* or critic role).
+    # Fixture A: default ``--tokens-per-char 0.25`` with t1 carrying
+    # task='a'*100 / context='b'*100 → 200 chars × 0.25 = 50 tokens; the
+    # other 2 specs are filler and don't influence the assertion.
+    # Fixture B: override ``--tokens-per-char 0.5`` on the same plan →
+    # t1 token_estimate = 100.
+    def _spec_tokens(sid: str, role: str,
+                     task: str, context: str) -> Dict[str, Any]:
+        return {"id": sid, "role": role,
+                "goal": task, "context": context,
+                "output_schema": {"type": "object"},
+                "tools": ["file"],
+                "model": "opencode-go/deepseek-v4.1-flash"}
+
+    tokens_long_task = "a" * 100
+    tokens_long_ctx = "b" * 100
+    plan_tokens = {"task_summary": "token-fixture",
+                   "specialists": [
+                       _spec_tokens("t1", "researcher",
+                                    tokens_long_task, tokens_long_ctx),
+                       _spec_tokens("t2", "critic",
+                                    "short task", "short context"),
+                       _spec_tokens("t3", "writer",
+                                    "filler task", "filler context")],
+                   "batches": [[0, 1, 2]],
+                   "dependencies": {}}
+    tokens_path = Path("/tmp") / "_f26_tokens.json"
+    with open(tokens_path, "w", encoding="utf-8") as _h:
+        json.dump(plan_tokens, _h)
+
+    _wipe_logs()
+    tokens_default_exit = main([str(tokens_path)])
+    if tokens_default_exit != 0:
+        failures += 1
+        print("SELF_TEST FAIL: token-fixture default exit "
+              "(expected 0, got %d)" % tokens_default_exit)
+    else:
+        # Read the trace; the final record for t1 should carry
+        # ``token_estimate == 50``.
+        try:
+            trace_lines = [json.loads(l) for l in
+                           ORCHESTRATION_TRACE.read_text().splitlines()
+                           if l.strip()]
+        except (OSError, json.JSONDecodeError) as exc:
+            trace_lines = []
+            failures += 1
+            print("SELF_TEST FAIL: token-fixture trace read: %s" % exc)
+        else:
+            final_t1 = _final_records_by_id(trace_lines).get("t1") or {}
+            est = final_t1.get("token_estimate")
+            if not isinstance(final_t1, dict) or final_t1.get("id") != "t1":
+                failures += 1
+                print("SELF_TEST FAIL: token-fixture default — final "
+                      "record for t1 missing")
+            elif est != 50:
+                failures += 1
+                print("SELF_TEST FAIL: token-fixture default — "
+                      "token_estimate (expected 50, got %s)" % est)
+            else:
+                print("SELF_TEST PASS: --tokens-per-char default 0.25 → "
+                      "token_estimate=50 on t1 (100+100 chars)")
+
+    _wipe_logs()
+    tokens_half_exit = main([str(tokens_path), "--tokens-per-char", "0.5"])
+    if tokens_half_exit != 0:
+        failures += 1
+        print("SELF_TEST FAIL: token-fixture override exit "
+              "(expected 0, got %d)" % tokens_half_exit)
+    else:
+        try:
+            trace_lines = [json.loads(l) for l in
+                           ORCHESTRATION_TRACE.read_text().splitlines()
+                           if l.strip()]
+        except (OSError, json.JSONDecodeError) as exc:
+            trace_lines = []
+            failures += 1
+            print("SELF_TEST FAIL: token-fixture override trace read: %s"
+                  % exc)
+        else:
+            final_t1 = _final_records_by_id(trace_lines).get("t1") or {}
+            est = final_t1.get("token_estimate")
+            if est != 100:
+                failures += 1
+                print("SELF_TEST FAIL: token-fixture override — "
+                      "token_estimate (expected 100, got %s)" % est)
+            else:
+                print("SELF_TEST PASS: --tokens-per-char 0.5 → "
+                      "token_estimate=100 on t1 (100+100 chars)")
+
+    if tokens_path.is_file():
+        tokens_path.unlink()
+    _wipe_logs()
+
+    total = 15
     print("SELF_TEST: %d/%d passed" % (total - failures, total))
     return failures == 0
 
@@ -1214,6 +1435,14 @@ def main(argv: Optional[List[str]] = None) -> int:
                              "is ON (a schema mismatch marks the specialist "
                              "status: failed with an output_schema mismatch "
                              "error).")
+    parser.add_argument("--tokens-per-char", type=float, default=0.25,
+                        help="F2.6: tokens-per-character factor for the "
+                             "per-call token estimate (default 0.25 ≈ 4 "
+                             "chars/token). estimate = max(1, int("
+                             "(len(task) + len(context)) * factor)). "
+                             "Set to 0 to disable (the trace still carries "
+                             "token_estimate=0). Order-independent with the "
+                             "other flags.")
     parser.add_argument("--self-test", action="store_true",
                         help="Run built-in end-to-end fixture")
     args = parser.parse_args(argv)
@@ -1242,6 +1471,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.max_cost < 0:
         print("error: --max-cost must be >= 0 (got %r)" % args.max_cost,
               file=sys.stderr)
+        return 2
+    if args.tokens_per_char < 0:
+        print("error: --tokens-per-char must be >= 0 (got %r)"
+              % args.tokens_per_char, file=sys.stderr)
         return 2
 
     fail_mode, simulate_n = args.fail_mode
@@ -1314,7 +1547,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         scripts_dir=scripts_dir, specialists_dir=specialists_dir,
         max_retries=args.max_retries,
         retry_strategy=args.retry_strategy,
-        schema_check=not args.no_schema_check)
+        schema_check=not args.no_schema_check,
+        tokens_per_char=args.tokens_per_char)
     return exit_code
 
 

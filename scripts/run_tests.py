@@ -36,17 +36,19 @@ PER_SCRIPT_TIMEOUT_SEC = 60.0
 # (validate_plan gained an E3 sub-rule fixture; dispatch gained a
 # post-dispatch schema-check fixture) + F2.5 (plan_preview gained the
 # 4-tier chain + cost-estimate preview line; dispatch gained the
-# cost-budget + option-tier resolution fixtures). DO NOT reorder or
-# recompute; the order + counts are the contract.
+# cost-budget + option-tier resolution fixtures) + F2.6 (dispatch
+# gained 2 token-estimate fixtures; write_log gained the F2.6
+# rendering fixture). DO NOT reorder or recompute; the order +
+# counts are the contract.
 SUITES = (
     ("validate_plan.py", 16),
-    ("dispatch.py",       13),
-    ("write_log.py",      7),
+    ("dispatch.py",       15),
+    ("write_log.py",      8),
 )
 
 SCRIPTS_DIR = "scripts"
 
-EXPECTED_TOTAL = sum(n for _, n in SUITES)  # 36
+EXPECTED_TOTAL = sum(n for _, n in SUITES)  # 39
 
 
 def _run_one(script_name: str, expected: int):
