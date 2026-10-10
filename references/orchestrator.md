@@ -2,7 +2,7 @@
 
 Source of truth for how any parent session spawns the Orchestrator identically.
 Copy-paste §1 as the spawn prompt; the plan shape in §2 is normative.
-References: PRD §§6 (R2, R3, R6, R8, R15), 8; Appendix A (archetype names only).
+References: PRD §§6 (R2, R3, R5, R6, R8, R15), 8; Appendix A (archetype names only).
 
 ## 1. Spawn preamble — copy-paste exactly
 
@@ -10,8 +10,7 @@ References: PRD §§6 (R2, R3, R6, R8, R15), 8; Appendix A (archetype names only
 You are the Orchestrator for the multi-agent-orchestrator skill (PRD §8).
 Model: opencode-go/kimi-k3 (pinned for Phase 1 — do not substitute; if
 unavailable, fail with an actionable message rather than substituting).
-Toolset: file access, terminal (read-only), delegate_task for subagent
-dispatch, web_search / web_extract as the task requires.
+Toolset: file access, terminal (read-only), delegate_task (available only for depth-≤2 helper spawns; batch dispatch stays parent-side), web_search / web_extract as the task requires.
 Depth: max_spawn_depth = 2 — specialists may spawn helpers, but nothing may
 recurse deeper; plans requiring depth > 2 are invalid.
 Required inputs: TASK: <the user task verbatim> and WORKSPACE: <absolute
@@ -33,10 +32,15 @@ Field names are locked. The Orchestrator must return exactly this shape:
     {"id": "r1", "role": "researcher", "goal": "one sentence + success criterion",
      "context": "task-relevant background and inputs",
      "output_schema": "{...json schema...}",
-     "tools": ["file", "terminal"],
+     "tools": ["file", "web_search", "web_extract"],
+     "model": "opencode-go/deepseek-v4.1-flash"},
+    {"id": "wr", "role": "writer", "goal": "one sentence + success criterion",
+     "context": "task-relevant background and inputs",
+     "output_schema": "{...json schema...}",
+     "tools": ["file"],
      "model": "opencode-go/deepseek-v4.1-flash"}
   ],
-  "batches": [[0, 1], [2]],
+  "batches": [[0], [1]],
   "dependencies": {"wr": ["r1"]}
 }
 ```
@@ -67,7 +71,7 @@ Field names are locked. The Orchestrator must return exactly this shape:
 `"batches"` uses INDICES (numbers positional into `specialists[]`);
 `"dependencies"` uses IDS (the `"id"` strings). Mixing them up is the most
 likely future bug: `{"batches": [[0, 1]]}` means "first and second specialists
-in parallel", while `{"dependencies": {"2": ["r1"]}}` is keyed by id strings.
+in parallel", while `{"dependencies": {"wr": ["r1"]}}` is keyed by id strings (`"wr"` names a specialist id, not a position).
 The F1.4 validator must enforce this; when in doubt, re-check this section.
 
 ## 4. Plan rules (normative)
@@ -89,6 +93,8 @@ as `short_circuit`. Only non-trivial tasks are spawned per §1.
 
 ## 6. Post-dispatch duties
 
+After the parent dispatches batches and collects outputs, it re-invokes the Orchestrator with the results; the Orchestrator then:
+
 1. Recovery per PRD R8: each failed or timed-out specialist is retried ONCE
    with an adjusted prompt; persistent failures are recorded and synthesis
    proceeds with available outputs rather than hanging (procedure detail is
@@ -102,4 +108,4 @@ as `short_circuit`. Only non-trivial tasks are spawned per §1.
 
 Archetype definitions (F1.3), plan validator code (F1.4), dispatch call
 mechanics (F1.5), synthesis/output-schema content (F1.6), recovery procedure
-detail (F1.7). This file states the contract only.
+detail (F1.7), log format (F1.8). This file states the contract only.
