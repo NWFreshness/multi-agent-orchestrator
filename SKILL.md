@@ -34,7 +34,7 @@ Plan: the Orchestrator analyzes the task and returns a JSON plan — chosen role
 
 Validate: the parent validates the plan before any dispatch — 3–15 specialists, `max_spawn_depth = 2`, well-formed `output_schema` per specialist. Invalid plans are rejected with a clear error and never dispatched. Run scripts/validate_plan.py (exit 0 = dispatchable) to gate the dispatch.
 
-Batch dispatch: the Orchestrator issues `delegate_task` calls, one array of specialists per batch, respecting dependency edges; independent specialists run in parallel.
+Batch dispatch: the Orchestrator issues `delegate_task` calls, one array of specialists per batch, respecting dependency edges; independent specialists run in parallel. Run scripts/dispatch.py PLAN.json (exit 0 = every specialist ran, trace in logs/orchestration-trace.jsonl).
 
 Recover: failed or timed-out specialists are retried once with an adjusted prompt per the error-handling rule (PRD R8); persistent failures are recorded and the synthesis proceeds with available outputs rather than hanging.
 
