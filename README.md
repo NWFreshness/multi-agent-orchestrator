@@ -33,7 +33,8 @@ Phase 1 MVP shipped: 10/10 features done. See `docs/specs/INDEX.md` for status a
 | F3.1    | Persistent specialist pools (named experts) | Done |
 | F3.2    | Custom archetypes (`~/.hermes/agents/*.yaml`) | Done |
 | F3.3    | Specialist output cache (TTL + namespaces) | Done |
-| F3.4    | Streaming progress to a file sink | In progress |
+| F3.4    | Streaming progress to a file sink | Done |
+| F3.5    | Async background run mode (`--background` detach) | In progress |
 
 > **Note (F1.9):** the `/orchestrate` slash command is registered in the local
 > Hermes checkout (`~/.hermes/hermes-agent`, branch

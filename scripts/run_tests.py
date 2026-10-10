@@ -43,11 +43,12 @@ PER_SCRIPT_TIMEOUT_SEC = 60.0
 # dir-chain + malformed-skip + defaults self-test) + F3.3 (dispatch
 # gained the 2 cache HIT/MISS fixtures; specialist_cache ships its own
 # 5-fixture self-test) + F3.4 (dispatch gained the 2 STREAM/SILENT
-# progress-sink fixtures). DO NOT reorder or recompute; the order +
+# progress-sink fixtures) + F3.5 (dispatch gained the 2 BG/BG_EXCLUSIVE
+# background-mode fixtures). DO NOT reorder or recompute; the order +
 # counts are the contract.
 SUITES = (
     ("validate_plan.py", 16),
-    ("dispatch.py",       19),
+    ("dispatch.py",       21),
     ("write_log.py",      8),
     ("discover_archetypes.py", 5),
     ("specialist_cache.py", 5),
@@ -55,7 +56,7 @@ SUITES = (
 
 SCRIPTS_DIR = "scripts"
 
-EXPECTED_TOTAL = sum(n for _, n in SUITES)  # 53
+EXPECTED_TOTAL = sum(n for _, n in SUITES)  # 55
 
 
 def _run_one(script_name: str, expected: int):
