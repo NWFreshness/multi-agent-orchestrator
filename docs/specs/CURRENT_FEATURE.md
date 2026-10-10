@@ -2,16 +2,16 @@
 
 ## In progress
 
-### 3.3 — Cache layer (in-session + named namespaces)
+### 3.4 — Streaming progress to a file sink
 
-- Spec: `docs/specs/phase-3/3.3-specialist-cache.md` (to be drafted)
-- Branch: `feat/3.3-specialist-cache`
+- Spec: `docs/specs/phase-3/3.4-streaming-progress.md` (to be drafted)
+- Branch: `feat/3.4-streaming-progress`
 - Status: implementer dispatch pending
-- Gate: `scripts/specialist_cache.py` (5 self-tests) + dispatcher
-  `--cache-namespace` / `--cache-ttl-hours` with `cached: true` stamps
-  (D45 content-hash key, D46 `.cache/orchestrator/<ns>/`, D47
-  never-breaks-a-run, D48 hits still schema-checked). run_tests 44→51.
-  Two-stage review + controller green; squash-merged via PR.
+- Gate: dispatcher `--progress PATH` (per-batch JSONL appends of trace
+  records; best-effort, never fails a run) + `references/streaming.md`
+  (D49 file sink, D50 no Telegram/Slack in skill, D51 never-blocks).
+  run_tests 51→53. Two-stage review + controller green; squash-merged
+  via PR.
 
 ## Completion log (append-only — newest at bottom)
 
@@ -35,6 +35,10 @@
   Spec PASS 10/10 + 5/5 adversarial; `--json` accepted as harmless
   additive. Quality APPROVED + controller-applied docstring nit.
   D41–D44 verified. run_tests 44/44. Next: F3.3 (cache layer).
+- 2026-10-10 — 3.3 done: specialist cache merged as c7ee41b via PR #18 (squash).
+  Spec PASS 10/10 + 6/6 adversarial. Race fix (unique probe; controller
+  dropped counter + finally-unlink). Quality APPROVED. D45–D48
+  verified. run_tests 51/51. Next: F3.4 (streaming progress).
 
 ## Completion log (append-only — newest at bottom)
 
